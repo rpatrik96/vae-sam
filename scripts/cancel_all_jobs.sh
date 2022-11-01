@@ -1,1 +1,0 @@
-squeue --me | awk 'NR>1 {print $1}' | xargs scancel

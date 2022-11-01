@@ -78,7 +78,7 @@ jobs:
 
     - name: Tests
       run: |
-        coverage run --source vae_sam -m py.test tests -v --junitxml=junit/test-results-${{ runner.os }}-${{ matrix.python-version }}.xml
+        coverage run --source vae_sam -m pytest tests -v --junitxml=junit/test-results-${{ runner.os }}-${{ matrix.python-version }}.xml
 
     - name: Statistics
       if: success()

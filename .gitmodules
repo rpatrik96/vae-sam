@@ -1,0 +1,6 @@
+[submodule "scripts"]
+	path = scripts
+	url = https://github.com/rpatrik96/cluster-tools
+[submodule "sam"]
+	path = sam
+	url = https://github.com/davda54/sam.git
