@@ -5,8 +5,9 @@ import torch.cuda
 from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning import Trainer, seed_everything
 
-from vae_sam.data.datamodules import IMADataModule
-from vae_sam.runners.runner import IMAModule
+from pl_bolts.datamodules import CIFAR10DataModule
+
+from vae_sam.runners.runner import SAMModule
 
 
 @hydra.main(config_path="../configs", config_name="trainer")
@@ -17,8 +18,8 @@ def main(cfg: DictConfig):
         cfg.trainer.gpus = 0
 
     trainer = Trainer.from_argparse_args(Namespace(**cfg.trainer))
-    model = IMAModule(**OmegaConf.to_container(cfg.model))
-    dm = IMADataModule.from_argparse_args(Namespace(**cfg.data))
+    model = SAMModule(**OmegaConf.to_container(cfg.model))
+    dm = CIFAR10DataModule.from_argparse_args(Namespace(**cfg.data))
 
     trainer.fit(model, datamodule=dm)
 

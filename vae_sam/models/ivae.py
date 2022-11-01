@@ -2,10 +2,9 @@ import torch
 from torch import nn
 from torch.distributions import MultivariateNormal
 
-from ima_vae.data.utils import DatasetType
-from ima_vae.distributions import Normal, Uniform, Beta, Laplace
-from ima_vae.models import nets
-from ima_vae.models.utils import weights_init, PriorType
+from vae_sam.distributions import Normal, Uniform, Beta, Laplace
+from vae_sam.models import nets
+from vae_sam.models.utils import weights_init, PriorType
 
 
 class iVAE(nn.Module):
@@ -13,7 +12,6 @@ class iVAE(nn.Module):
         self,
         latent_dim: int,
         data_dim: int,
-        n_segments: int,
         n_classes: int,
         n_layers: int,
         activation,
@@ -24,7 +22,7 @@ class iVAE(nn.Module):
         posterior=None,
         slope: float = 0.2,
         diag_posterior: bool = True,
-        dataset: DatasetType = "synth",
+        dataset="synth",
         fix_prior=True,
         beta: float = 1.0,
         prior_alpha: float = 3.0,
@@ -32,16 +30,12 @@ class iVAE(nn.Module):
         prior_mean: float = 0.0,
         prior_var: float = 1.0,
         decoder_var: float = 0.000001,
-        analytic_kl=False,
-        encoder_extra_layers=0,
-        encoder_extra_width=0,
         learn_dec_var: bool = False,
     ):
         super().__init__()
 
         self.data_dim = data_dim
         self.latent_dim = latent_dim
-        self.n_segments = n_segments
         self.n_layers = n_layers
         self.activation = activation
         self.slope = slope
@@ -49,7 +43,6 @@ class iVAE(nn.Module):
         self.fix_prior = fix_prior
         self.beta = beta
         self.hidden_dim = self.latent_dim * hidden_latent_factor
-        self.analytic_kl = analytic_kl
         self.learn_dec_var = learn_dec_var
 
         self._setup_distributions(
@@ -76,8 +69,6 @@ class iVAE(nn.Module):
         n_layers,
         slope,
         decoder_var=0.000001,
-        encoder_extra_layers=0,
-        encoder_extra_width=0,
     ):
         # decoder params
         if self.learn_dec_var is False:
@@ -89,21 +80,9 @@ class iVAE(nn.Module):
                 decoder_var * torch.ones(1, dtype=torch.float64).to(device),
                 requires_grad=self.learn_dec_var,
             )
-        self.gt_decoder = None
 
-        if dataset == "synth":
-            self.encoder, self.decoder = nets.get_synth_models(
-                self.data_dim,
-                self.latent_dim,
-                self.hidden_dim,
-                self.post_dim,
-                n_layers,
-                self.activation,
-                device,
-                slope,
-            )
-        elif dataset == "image":
-            self.encoder, self.decoder = nets.get_sprites_models(
+        if dataset == "image":
+            self.encoder, self.decoder = nets.get_image_models(
                 self.latent_dim, self.post_dim, n_channels=3
             )
 
@@ -201,9 +180,7 @@ class iVAE(nn.Module):
         return enc_logvar, enc_mean, latents, log_qz_xu
 
     def decode(self, z):
-        dec = self.decoder if self.gt_decoder is None else self.gt_decoder
-
-        return dec(z)
+        return self.decoder(z)
 
     def forward(self, x):
         """
@@ -238,50 +215,7 @@ class iVAE(nn.Module):
         # log_px_z = ((x_recon-x.to(device))**2).flatten(1).sum(1).mul(-1)
 
         log_pz_u, mean, var = self._prior_log_likelihood(latents, u)
-
-        if (
-            self.analytic_kl is True
-            and self.prior.name == "gaussian"
-            and self.posterior.diag is True
-        ):
-
-            if self.fix_prior is True:
-                # source: https://en.wikipedia.org/wiki/Multivariate_normal_distribution#Kullback%E2%80%93Leibler_divergence
-                # using that prior mean is 0
-                kl_loss = (
-                    -0.5
-                    * (
-                        (encoding_logvar.exp() + encoding_mean**2) / var
-                        + torch.log(var)
-                        - encoding_logvar
-                    )
-                    .mean(0)
-                    .sum()
-                    + self.latent_dim / 2
-                )
-            else:
-
-                if mean.shape != latents.shape:
-                    mean = mean * torch.ones_like(latents)
-                if var.shape != latents.shape:
-                    var = var * torch.ones_like(latents)
-
-                kl_loss = -torch.cat(
-                    [
-                        torch.distributions.kl_divergence(
-                            MultivariateNormal(
-                                q_mean,
-                                torch.diag(q_var),
-                            ),
-                            MultivariateNormal(p_mean, torch.diag(p_var)),
-                        ).view(1)
-                        for q_mean, q_var, p_mean, p_var in zip(
-                            encoding_mean, encoding_logvar.exp(), mean, var
-                        )
-                    ]
-                ).mean()
-        else:
-            kl_loss = (log_pz_u - log_qz_xu).mean()
+        kl_loss = (log_pz_u - log_qz_xu).mean()
         rec_loss = log_px_z.mean()
 
         if log is True:
