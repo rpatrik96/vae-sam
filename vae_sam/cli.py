@@ -3,9 +3,10 @@ from pytorch_lightning.loggers.wandb import WandbLogger
 from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
 
 
-from vae_sam.runners.runner import SAMModule
+# from vae_sam.runners.runner import SAMModule
 from vae_sam.utils import add_tags
 from pl_bolts.datamodules import CIFAR10DataModule
+from vae_sam.models.ivae import VAE
 
 
 class MyLightningCLI(LightningCLI):
@@ -56,18 +57,18 @@ class MyLightningCLI(LightningCLI):
 
 
 cli = MyLightningCLI(
-    SAMModule,
+    VAE,
     CIFAR10DataModule,
     save_config_callback=None,
     run=True,
-    parser_kwargs={"parse_as_dict": False},
-    trainer_defaults={
-        "callbacks": [
-            ModelCheckpoint(
-                save_top_k=1,
-                monitor="Metrics/val/neg_elbo",
-                mode="min",
-            ),
-        ]
-    },
+    # parser_kwargs={"parse_as_dict": False},
+    # trainer_defaults={
+    #     "callbacks": [
+    #         ModelCheckpoint(
+    #             save_top_k=1,
+    #             monitor="Metrics/val/neg_elbo",
+    #             mode="min",
+    #         ),
+    #     ]
+    # },
 )

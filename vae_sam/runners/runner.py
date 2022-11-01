@@ -6,7 +6,7 @@ import pytorch_lightning as pl
 import torch
 import wandb
 
-from vae_sam.models.ivae import iVAE
+from vae_sam.models.ivae import VAE
 from vae_sam.models.utils import ActivationType
 from vae_sam.models.utils import PriorType
 
@@ -20,7 +20,7 @@ class SAMModule(pl.LightningModule):
         n_layers: int = 2,
         lr: float = 1e-3,
         n_classes: int = 10,
-        dataset="synth",
+        dataset="image",
         log_latents: bool = False,
         log_reconstruction: bool = False,
         prior: PriorType = "uniform",
@@ -88,7 +88,7 @@ class SAMModule(pl.LightningModule):
         return self.model(obs, labels)
 
     def training_step(self, batch, batch_idx):
-        obs, labels, sources = batch
+        obs, labels = batch
         neg_elbo, z_est, rec_loss, kl_loss, _, _, _ = self.model.neg_elbo(obs, labels)
 
         panel_name = "Metrics/train"
@@ -111,7 +111,7 @@ class SAMModule(pl.LightningModule):
             )
 
     def validation_step(self, batch, batch_idx):
-        obs, labels, sources = batch
+        obs, labels = batch
         (
             neg_elbo,
             latent,
@@ -135,7 +135,7 @@ class SAMModule(pl.LightningModule):
         return neg_elbo
 
     def test_step(self, batch, batch_idx):
-        obs, labels, sources = batch
+        obs, labels = batch
         (
             neg_elbo,
             latent,

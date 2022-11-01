@@ -1,1 +1,1 @@
-from .ivae import iVAE
+from .ivae import VAE

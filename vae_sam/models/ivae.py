@@ -1,308 +1,208 @@
+import urllib.parse
+from argparse import ArgumentParser
+
 import torch
+from pytorch_lightning import LightningModule, Trainer, seed_everything
 from torch import nn
-from torch.distributions import MultivariateNormal
+from torch.nn import functional as F
 
-from vae_sam.distributions import Normal, Uniform, Beta, Laplace
-from vae_sam.models import nets
-from vae_sam.models.utils import weights_init, PriorType
+from pl_bolts import _HTTPS_AWS_HUB
+from pl_bolts.models.autoencoders.components import (
+    resnet18_decoder,
+    resnet18_encoder,
+    resnet50_decoder,
+    resnet50_encoder,
+)
 
 
-class iVAE(nn.Module):
+from sam.sam import SAM
+
+
+class VAE(LightningModule):
+    """Standard VAE with Gaussian Prior and approx posterior.
+    Model is available pretrained on different datasets:
+    Example::
+        # not pretrained
+        vae = VAE()
+        # pretrained on cifar10
+        vae = VAE(input_height=32).from_pretrained('cifar10-resnet18')
+        # pretrained on stl10
+        vae = VAE(input_height=32).from_pretrained('stl10-resnet18')
+    """
+
+    pretrained_urls = {
+        "cifar10-resnet18": urllib.parse.urljoin(
+            _HTTPS_AWS_HUB, "vae/vae-cifar10/checkpoints/epoch%3D89.ckpt"
+        ),
+        "stl10-resnet18": urllib.parse.urljoin(
+            _HTTPS_AWS_HUB, "vae/vae-stl10/checkpoints/epoch%3D89.ckpt"
+        ),
+    }
+
     def __init__(
         self,
-        latent_dim: int,
-        data_dim: int,
-        n_classes: int,
-        n_layers: int,
-        activation,
-        device,
-        hidden_latent_factor: int = 10,
-        prior: PriorType = "uniform",
-        likelihood=None,
-        posterior=None,
-        slope: float = 0.2,
-        diag_posterior: bool = True,
-        dataset="synth",
-        fix_prior=True,
-        beta: float = 1.0,
-        prior_alpha: float = 3.0,
-        prior_beta: float = 11.0,
-        prior_mean: float = 0.0,
-        prior_var: float = 1.0,
-        decoder_var: float = 0.000001,
-        learn_dec_var: bool = False,
+        input_height: int = 32,
+        enc_type: str = "resnet18",
+        first_conv: bool = False,
+        maxpool1: bool = False,
+        enc_out_dim: int = 512,
+        kl_coeff: float = 0.1,
+        latent_dim: int = 256,
+        lr: float = 1e-4,
+        **kwargs,
     ):
+        """
+        Args:
+            input_height: height of the images
+            enc_type: option between resnet18 or resnet50
+            first_conv: use standard kernel_size 7, stride 2 at start or
+                replace it with kernel_size 3, stride 1 conv
+            maxpool1: use standard maxpool to reduce spatial dim of feat by a factor of 2
+            enc_out_dim: set according to the out_channel count of
+                encoder used (512 for resnet18, 2048 for resnet50)
+            kl_coeff: coefficient for kl term of the loss
+            latent_dim: dim of latent space
+            lr: learning rate for Adam
+        """
+
         super().__init__()
 
-        self.data_dim = data_dim
+        self.save_hyperparameters()
+
+        self.base_optimizer = torch.optim.SGD
+        self.automatic_optimization = False
+
+        self.lr = lr
+        self.kl_coeff = kl_coeff
+        self.enc_out_dim = enc_out_dim
         self.latent_dim = latent_dim
-        self.n_layers = n_layers
-        self.activation = activation
-        self.slope = slope
-        self.n_classes = n_classes
-        self.fix_prior = fix_prior
-        self.beta = beta
-        self.hidden_dim = self.latent_dim * hidden_latent_factor
-        self.learn_dec_var = learn_dec_var
+        self.input_height = input_height
 
-        self._setup_distributions(
-            likelihood,
-            posterior,
-            prior,
-            device,
-            diag_posterior,
-            prior_alpha,
-            prior_beta,
-            prior_mean,
-            prior_var,
-        )
-        self._setup_nets(dataset, device, n_layers, slope, decoder_var)
-
-        self.interp_sample = None
-        self.interp_dir = None
-        self.apply(weights_init)
-
-    def _setup_nets(
-        self,
-        dataset,
-        device,
-        n_layers,
-        slope,
-        decoder_var=0.000001,
-    ):
-        # decoder params
-        if self.learn_dec_var is False:
-            self.decoder_var = decoder_var * torch.ones(1, dtype=torch.float64).to(
-                device
-            )
-        else:
-            self.decoder_var = nn.Parameter(
-                decoder_var * torch.ones(1, dtype=torch.float64).to(device),
-                requires_grad=self.learn_dec_var,
-            )
-
-        if dataset == "image":
-            self.encoder, self.decoder = nets.get_image_models(
-                self.latent_dim, self.post_dim, n_channels=3
-            )
-
-    def _setup_distributions(
-        self,
-        likelihood,
-        posterior,
-        prior: PriorType,
-        device,
-        diag_posterior,
-        prior_alpha: float = 3.0,
-        prior_beta: float = 11.0,
-        prior_mean: float = 0.0,
-        prior_var: float = 1.0,
-    ):
-        # prior_params
-        self.prior_mean = prior_mean * torch.zeros(1).to(device)
-        self.prior_var = prior_var * torch.ones(1).to(device)
-        self.prior_alpha = prior_alpha
-        self.prior_beta = prior_beta
-
-        if prior == "gaussian" or prior is None:
-            self.prior = Normal(device=device, diag=True)
-        elif prior == "beta":
-            self.prior = Beta()
-        elif prior == "uniform":
-            self.prior = Uniform()
-        elif prior == "laplace":
-            self.prior = Laplace()
-        else:
-            self.prior = prior
-
-        if self.prior.name != "uniform":
-            self.conditioner = nets.MLP(
-                self.n_classes,
-                self.latent_dim * (2 - bool(self.fix_prior)),
-                self.latent_dim * 4,
-                self.n_layers,
-                activation=self.activation,
-                slope=self.slope,
-                device=device,
-            )
-
-        # likelihood
-        if likelihood is None:
-            self.likelihood = Normal(device=device, diag=True)
-        else:
-            self.likelihood = likelihood
-
-        # posterior
-        if posterior is None:
-            self.posterior = Normal(device=device, diag=diag_posterior)
-        else:
-            self.posterior = posterior
-
-        if self.posterior.diag:
-            self.post_dim = 2 * self.latent_dim
-        else:
-            self.cholesky_factors = (self.latent_dim * (self.latent_dim + 1)) / 2
-            self.post_dim = int(self.latent_dim + self.cholesky_factors)
-            self.cholesky = None
-
-    def _encoder_params(self, x):
-        """
-
-        :param x: observations
-        :return:
-        """
-        encoding = self.encoder(x)
-        mu = encoding[:, : self.latent_dim]
-        log_var = cholesky_factors = encoding[:, self.latent_dim :]
-
-        return mu, log_var, cholesky_factors
-
-    def encode(self, x):
-        enc_mean, enc_logvar, enc_cholesky = self._encoder_params(x)
-
-        if self.posterior.diag:
-            latents = self.posterior.sample(enc_mean, enc_logvar.exp())
-            log_qz_xu = self.posterior.log_pdf(latents, enc_mean, enc_logvar.exp())
-        else:
-            self.cholesky = torch.zeros(
-                (x.shape[0], self.latent_dim, self.latent_dim)
-            ).to(x.device)
-            self._populate_cholesky(enc_cholesky)
-            latents = self.posterior.sample(enc_mean, self.cholesky)
-            log_qz_xu = self.posterior.log_pdf_full(latents, enc_mean, self.cholesky)
-
-        if self.prior.name == "beta" or self.prior.name == "uniform":
-            eps = 1e-8
-            latents = torch.sigmoid(latents)
-            determ = torch.log(1.0 / (latents * (1.0 - latents) + eps)).sum(1)
-            log_qz_xu += determ
-
-        return enc_logvar, enc_mean, latents, log_qz_xu
-
-    def decode(self, z):
-        return self.decoder(z)
-
-    def forward(self, x):
-        """
-
-        :param x: observations
-        :return:
-        """
-        enc_logvar, enc_mean, latents, log_qz_xu = self.encode(x)
-
-        reconstructions = self.decode(latents)
-        return enc_mean, enc_logvar, latents, reconstructions, log_qz_xu
-
-    def neg_elbo(
-        self, x, u, log=True, reconstruction: bool = False, mean_latents=False
-    ):
-        """
-
-        :param mean_latents:
-        :param x: observations
-        :param u: segment labels
-        :return:
-        """
-        (
-            encoding_mean,
-            encoding_logvar,
-            latents,
-            reconstructions,
-            log_qz_xu,
-        ) = self.forward(x)
-
-        log_px_z = self._obs_log_likelihood(reconstructions, x)
-        # log_px_z = ((x_recon-x.to(device))**2).flatten(1).sum(1).mul(-1)
-
-        log_pz_u, mean, var = self._prior_log_likelihood(latents, u)
-        kl_loss = (log_pz_u - log_qz_xu).mean()
-        rec_loss = log_px_z.mean()
-
-        if log is True:
-            latent_stat = self._latent_statistics(encoding_mean, encoding_logvar.exp())
-
-        neg_elbo = -(rec_loss + self.beta * kl_loss)
-
-        return (
-            neg_elbo,
-            latents,
-            rec_loss,
-            kl_loss,
-            None if log is False else latent_stat,
-            None if reconstruction is False else reconstructions,
-            None if mean_latents is False else encoding_mean,
-        )
-
-    def _prior_log_likelihood(self, latents, u):
-        # all prior parameters fixed if uniform
-        if self.prior.name == "uniform":
-            mean, var = self.prior_mean, self.prior_var
-
-        else:
-
-            if self.fix_prior is False:
-                prior_params = self.conditioner(u)
-                prior_mean = prior_params[:, : self.latent_dim]
-                prior_logvar = prior_params[:, self.latent_dim :]
-
-            if self.prior.name == "gaussian":
-                if self.fix_prior is True:
-                    mean, var = self.prior_mean, self.prior_var  # prior_params.exp()
-
-                else:
-                    mean, var = prior_mean, prior_logvar.exp()
-
-            elif self.prior.name == "beta":
-                if self.fix_prior is True:
-                    mean = (
-                        torch.ones(
-                            (latents.shape[0], self.latent_dim), device=latents.device
-                        )
-                        * self.prior_alpha
-                    )
-                    var = (
-                        torch.ones(
-                            (latents.shape[0], self.latent_dim), device=latents.device
-                        )
-                        * self.prior_beta
-                    )
-
-                else:
-                    mean = torch.abs(prior_mean) + 2
-                    var = torch.abs(prior_logvar) + 2
-
-            elif self.prior.name == "laplace":
-                if self.fix_prior is True:
-                    mean, var = self.prior_mean, self.prior_var
-                else:
-                    mean, var = prior_mean, prior_logvar.exp()
-
-        log_pz_u = self.prior.log_pdf(latents, mean, var)
-        return log_pz_u, mean, var
-
-    def _obs_log_likelihood(self, reconstructions, x):
-        log_px_z = self.likelihood.log_pdf(
-            reconstructions.flatten(1), x.flatten(1), self.decoder_var
-        )
-        return log_px_z
-
-    def _latent_statistics(self, encoding, enc_variance) -> dict:
-
-        latent_variance = enc_variance.mean(0)
-        latent_mean = encoding.mean(0)
-        latent_stat = {
-            **{
-                f"latent_variance_{i}": latent_variance[i] for i in range(self.data_dim)
+        valid_encoders = {
+            "resnet18": {
+                "enc": resnet18_encoder,
+                "dec": resnet18_decoder,
             },
-            **{f"latent_mean_{i}": latent_mean[i] for i in range(self.data_dim)},
-            **{f"latent_mean_variance": latent_mean.var()},
+            "resnet50": {
+                "enc": resnet50_encoder,
+                "dec": resnet50_decoder,
+            },
         }
 
-        return latent_stat
+        if enc_type not in valid_encoders:
+            self.encoder = resnet18_encoder(first_conv, maxpool1)
+            self.decoder = resnet18_decoder(
+                self.latent_dim, self.input_height, first_conv, maxpool1
+            )
+        else:
+            self.encoder = valid_encoders[enc_type]["enc"](first_conv, maxpool1)
+            self.decoder = valid_encoders[enc_type]["dec"](
+                self.latent_dim, self.input_height, first_conv, maxpool1
+            )
 
-    def _populate_cholesky(self, cholesky_factors):
-        it = 0
-        for i in range(self.cholesky.shape[1]):
-            for j in range(i + 1):
-                self.cholesky[:, i, j] = cholesky_factors[:, it]
-                it += 1
+        self.fc_mu = nn.Linear(self.enc_out_dim, self.latent_dim)
+        self.fc_var = nn.Linear(self.enc_out_dim, self.latent_dim)
+
+    @staticmethod
+    def pretrained_weights_available():
+        return list(VAE.pretrained_urls.keys())
+
+    def from_pretrained(self, checkpoint_name):
+        if checkpoint_name not in VAE.pretrained_urls:
+            raise KeyError(str(checkpoint_name) + " not present in pretrained weights.")
+
+        return self.load_from_checkpoint(
+            VAE.pretrained_urls[checkpoint_name], strict=False
+        )
+
+    def forward(self, x):
+        x = self.encoder(x)
+        mu = self.fc_mu(x)
+        log_var = self.fc_var(x)
+        p, q, z = self.sample(mu, log_var)
+        return self.decoder(z)
+
+    def _run_step(self, x):
+        x = self.encoder(x)
+        mu = self.fc_mu(x)
+        log_var = self.fc_var(x)
+        p, q, z = self.sample(mu, log_var)
+        return z, self.decoder(z), p, q
+
+    def sample(self, mu, log_var):
+        std = torch.exp(log_var / 2)
+        p = torch.distributions.Normal(torch.zeros_like(mu), torch.ones_like(std))
+        q = torch.distributions.Normal(mu, std)
+        z = q.rsample()
+        return p, q, z
+
+    def step(self, batch, batch_idx):
+        x, y = batch
+        z, x_hat, p, q = self._run_step(x)
+
+        recon_loss = F.mse_loss(x_hat, x, reduction="mean")
+
+        kl = torch.distributions.kl_divergence(q, p)
+        kl = kl.mean()
+        kl *= self.kl_coeff
+
+        loss = kl + recon_loss
+
+        logs = {
+            "recon_loss": recon_loss,
+            "kl": kl,
+            "loss": loss,
+        }
+        return loss, logs
+
+    def training_step(self, batch, batch_idx):
+        optimizer = self.optimizers()
+
+        # first forward-backward pass
+        loss_1, logs = self.step(batch, batch_idx)
+        self.manual_backward(loss_1)
+        optimizer.first_step(zero_grad=True)
+
+        # second forward-backward pass
+        loss_2, _ = self.step(batch, batch_idx)
+        self.manual_backward(loss_2)
+        optimizer.second_step(zero_grad=True)
+
+        self.log_dict(
+            {f"train_{k}": v for k, v in logs.items()}, on_step=True, on_epoch=False
+        )
+        return loss_1
+
+    def validation_step(self, batch, batch_idx):
+        loss, logs = self.step(batch, batch_idx)
+        self.log_dict({f"val_{k}": v for k, v in logs.items()})
+        return loss
+
+    def configure_optimizers(self):
+        return SAM(self.parameters(), self.base_optimizer, lr=self.lr)
+
+    @staticmethod
+    def add_model_specific_args(parent_parser):
+        parser = ArgumentParser(parents=[parent_parser], add_help=False)
+
+        parser.add_argument(
+            "--enc_type", type=str, default="resnet18", help="resnet18/resnet50"
+        )
+        parser.add_argument("--first_conv", action="store_true")
+        parser.add_argument("--maxpool1", action="store_true")
+        parser.add_argument("--lr", type=float, default=1e-4)
+
+        parser.add_argument(
+            "--enc_out_dim",
+            type=int,
+            default=512,
+            help="512 for resnet18, 2048 for bigger resnets, adjust for wider resnets",
+        )
+        parser.add_argument("--kl_coeff", type=float, default=0.1)
+        parser.add_argument("--latent_dim", type=int, default=256)
+
+        parser.add_argument("--batch_size", type=int, default=256)
+        parser.add_argument("--num_workers", type=int, default=8)
+        parser.add_argument("--data_dir", type=str, default=".")
+
+        return parser
