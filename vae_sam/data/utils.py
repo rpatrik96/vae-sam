@@ -10,8 +10,6 @@ from matplotlib import pyplot as plt
 from spriteworld.gen_sprites_dataset import sprites_gen_wrapper
 from spriteworld.utils import sprites_filename
 
-from ima_vae.metrics.cima import cima_kl_diagonality
-
 
 def l2_normalize(Amat, axis=0):
     l2norm = np.sqrt(np.sum(Amat * Amat, axis))

@@ -6,9 +6,9 @@ import torchvision.transforms
 from torch.utils.data import DataLoader
 from torch.utils.data import random_split
 
-from ima_vae.data.data_generators import gen_synth_dataset
-from ima_vae.data.dataset import ConditionalDataset
-from ima_vae.data.utils import DatasetType, load_sprites
+
+from vae_sam.data.dataset import ConditionalDataset
+from vae_sam.data.utils import DatasetType, load_sprites
 
 
 class IMADataModule(pl.LightningDataModule):
@@ -110,39 +110,7 @@ class IMADataModule(pl.LightningDataModule):
                 self.hparams.shape,
                 self.hparams.seed,
             )
-        elif self.hparams.dataset == "synth":
-            transform = None
 
-            n_obs_per_seg = int(self.hparams.n_obs / self.hparams.n_segments)
-
-            (
-                obs,
-                labels,
-                sources,
-                self.mixing,
-                self.unmixing,
-                self.discrete_list,
-                self.linear_map,
-            ) = gen_synth_dataset.gen_data(
-                num_dim=self.hparams.latent_dim,
-                num_layer=self.hparams.mixing_layers,
-                num_segment=self.hparams.n_segments,
-                num_segment_obs=n_obs_per_seg,
-                orthog=self.hparams.orthog,
-                nonlin="none" if self.hparams.linear is True else "smooth_lrelu",
-                seed=self.hparams.seed,
-                source=self.hparams.synth_source,
-                break_orthog=self.hparams.break_orthog,
-                mobius=self.hparams.mobius,
-                alpha_shape=self.hparams.prior_alpha,
-                beta_shape=self.hparams.prior_beta,
-                mean=self.hparams.prior_mean,
-                var=self.hparams.prior_var,
-                ar_flow=self.hparams.ar_flow,
-                mlp=self.hparams.mlp,
-                unit_det=self.hparams.unit_det,
-                col_norm=self.hparams.col_norm,
-            )
         else:
             raise ValueError
 
