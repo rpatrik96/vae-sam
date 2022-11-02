@@ -2,10 +2,6 @@ import urllib.parse
 from argparse import ArgumentParser
 
 import torch
-from pytorch_lightning import LightningModule, Trainer, seed_everything
-from torch import nn
-from torch.nn import functional as F
-
 from pl_bolts import _HTTPS_AWS_HUB
 from pl_bolts.models.autoencoders.components import (
     resnet18_decoder,
@@ -13,9 +9,9 @@ from pl_bolts.models.autoencoders.components import (
     resnet50_decoder,
     resnet50_encoder,
 )
-
-
-from sam.sam import SAM
+from pytorch_lightning import LightningModule
+from torch import nn
+from torch.nn import functional as F
 
 
 class VAE(LightningModule):
@@ -49,6 +45,9 @@ class VAE(LightningModule):
         kl_coeff: float = 0.1,
         latent_dim: int = 256,
         lr: float = 1e-4,
+        rho=1.0,
+        sam_update=False,
+        norm_p=2.0,
         **kwargs,
     ):
         """
@@ -68,9 +67,6 @@ class VAE(LightningModule):
         super().__init__()
 
         self.save_hyperparameters()
-
-        self.base_optimizer = torch.optim.SGD
-        self.automatic_optimization = False
 
         self.lr = lr
         self.kl_coeff = kl_coeff
@@ -127,7 +123,7 @@ class VAE(LightningModule):
         mu = self.fc_mu(x)
         log_var = self.fc_var(x)
         p, q, z = self.sample(mu, log_var)
-        return z, self.decoder(z), p, q
+        return z, mu, self.decoder(z), p, q
 
     def sample(self, mu, log_var):
         std = torch.exp(log_var / 2)
@@ -138,9 +134,9 @@ class VAE(LightningModule):
 
     def step(self, batch, batch_idx):
         x, y = batch
-        z, x_hat, p, q = self._run_step(x)
+        z, z_mu, x_hat, p, q = self._run_step(x)
 
-        recon_loss = F.mse_loss(x_hat, x, reduction="mean")
+        recon_loss = self.rec_loss(z_mu, x, x_hat)
 
         kl = torch.distributions.kl_divergence(q, p)
         kl = kl.mean()
@@ -155,23 +151,30 @@ class VAE(LightningModule):
         }
         return loss, logs
 
+    def rec_loss(
+        self, z_mu: torch.Tensor, x: torch.Tensor, x_hat: torch.Tensor
+    ) -> torch.Tensor:
+        if self.hparams.sam_update is False:
+            recon_loss = F.mse_loss(x_hat, x, reduction="mean")
+        else:
+            dLdz = torch.autograd.grad(
+                outputs=F.mse_loss(self.decoder(z_mu), x), inputs=z_mu
+            )[0].detach()
+            scale = self.hparams.rho / dLdz.norm(
+                p=self.hparams.norm_p, dim=1, keepdim=True
+            )
+            recon_loss = F.mse_loss(
+                self.decoder(z_mu + scale * dLdz), x, reduction="mean"
+            )
+        return recon_loss
+
     def training_step(self, batch, batch_idx):
-        optimizer = self.optimizers()
-
-        # first forward-backward pass
-        loss_1, logs = self.step(batch, batch_idx)
-        self.manual_backward(loss_1)
-        optimizer.first_step(zero_grad=True)
-
-        # second forward-backward pass
-        loss_2, _ = self.step(batch, batch_idx)
-        self.manual_backward(loss_2)
-        optimizer.second_step(zero_grad=True)
-
+        loss, logs = self.step(batch, batch_idx)
         self.log_dict(
             {f"train_{k}": v for k, v in logs.items()}, on_step=True, on_epoch=False
         )
-        return loss_1
+
+        return loss
 
     def validation_step(self, batch, batch_idx):
         loss, logs = self.step(batch, batch_idx)
@@ -179,7 +182,7 @@ class VAE(LightningModule):
         return loss
 
     def configure_optimizers(self):
-        return SAM(self.parameters(), self.base_optimizer, lr=self.lr)
+        return torch.optim.SGD(self.parameters(), lr=self.lr)
 
     @staticmethod
     def add_model_specific_args(parent_parser):
