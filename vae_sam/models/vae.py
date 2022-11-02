@@ -2,10 +2,6 @@ import urllib.parse
 from argparse import ArgumentParser
 
 import torch
-from pytorch_lightning import LightningModule, Trainer, seed_everything
-from torch import nn
-from torch.nn import functional as F
-
 from pl_bolts import _HTTPS_AWS_HUB
 from pl_bolts.models.autoencoders.components import (
     resnet18_decoder,
@@ -13,9 +9,9 @@ from pl_bolts.models.autoencoders.components import (
     resnet50_decoder,
     resnet50_encoder,
 )
-
-
-from sam.sam import SAM
+from pytorch_lightning import LightningModule
+from torch import nn
+from torch.nn import functional as F
 
 
 class VAE(LightningModule):
@@ -71,9 +67,6 @@ class VAE(LightningModule):
         super().__init__()
 
         self.save_hyperparameters()
-
-        self.base_optimizer = torch.optim.SGD
-        self.automatic_optimization = False
 
         self.lr = lr
         self.kl_coeff = kl_coeff
@@ -176,22 +169,12 @@ class VAE(LightningModule):
         return recon_loss
 
     def training_step(self, batch, batch_idx):
-        optimizer = self.optimizers()
-
-        # first forward-backward pass
-        loss_1, logs = self.step(batch, batch_idx)
-        self.manual_backward(loss_1)
-        optimizer.first_step(zero_grad=True)
-
-        # second forward-backward pass
-        loss_2, _ = self.step(batch, batch_idx)
-        self.manual_backward(loss_2)
-        optimizer.second_step(zero_grad=True)
-
+        loss, logs = self.step(batch, batch_idx)
         self.log_dict(
             {f"train_{k}": v for k, v in logs.items()}, on_step=True, on_epoch=False
         )
-        return loss_1
+
+        return loss
 
     def validation_step(self, batch, batch_idx):
         loss, logs = self.step(batch, batch_idx)
@@ -199,7 +182,7 @@ class VAE(LightningModule):
         return loss
 
     def configure_optimizers(self):
-        return SAM(self.parameters(), self.base_optimizer, lr=self.lr)
+        return torch.optim.SGD(self.parameters(), lr=self.lr)
 
     @staticmethod
     def add_model_specific_args(parent_parser):
