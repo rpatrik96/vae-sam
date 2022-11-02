@@ -56,6 +56,8 @@ jobs:
         pip install --requirement requirements.txt --upgrade --quiet --find-links https://download.pytorch.org/whl/cpu/torch_stable.html
         pip install --requirement tests/requirements.txt --quiet
         
+        pip install git+https://github.com/PytorchLightning/lightning-bolts.git@c2552c7d177eaa14b2ca2e340e8814bba21457f4 --upgrade
+        
 
         python --version
         pip --version
