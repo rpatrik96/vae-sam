@@ -33,7 +33,7 @@ class SAMLightningCLI(LightningCLI):
         )
 
     def before_instantiate_classes(self) -> None:
-        if isinstance(self.trainer.logger, WandbLogger) is True:
+        if isinstance(self.config[self.subcommand].trainer.logger, WandbLogger) is True:
             self.config[self.subcommand].trainer.logger.init_args.tags = add_tags(
                 self.config[self.subcommand]
             )
