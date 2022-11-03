@@ -154,9 +154,14 @@ class VAE(LightningModule):
     def rec_loss(
         self, z_mu: torch.Tensor, x: torch.Tensor, x_hat: torch.Tensor
     ) -> torch.Tensor:
-        if self.training is False or self.hparams.sam_update is False:
+        if self.hparams.sam_update is False:
             recon_loss = F.mse_loss(x_hat, x, reduction="mean")
-        elif self.training is True:
+        elif self.hparams.sam_update is True:
+
+            if self.training is False:
+                torch.set_grad_enabled(True)
+                z_mu.requires_grad = True
+
             dLdz = torch.autograd.grad(
                 outputs=F.mse_loss(self.decoder(z_mu), x), inputs=z_mu
             )[0].detach()
@@ -166,6 +171,9 @@ class VAE(LightningModule):
             recon_loss = F.mse_loss(
                 self.decoder(z_mu + scale * dLdz), x, reduction="mean"
             )
+            if self.training is False:
+                torch.set_grad_enabled(False)
+
         return recon_loss
 
     def training_step(self, batch, batch_idx):
