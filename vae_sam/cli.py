@@ -1,6 +1,7 @@
 from pl_bolts.datamodules import CIFAR10DataModule
 from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
 from pytorch_lightning.cli import LightningCLI
+from pytorch_lightning.loggers.wandb import WandbLogger
 
 from vae_sam.models.vae import VAE
 from vae_sam.utils import add_tags
@@ -32,9 +33,10 @@ class SAMLightningCLI(LightningCLI):
         )
 
     def before_instantiate_classes(self) -> None:
-        self.config[self.subcommand].trainer.logger.init_args.tags = add_tags(
-            self.config[self.subcommand]
-        )
+        if isinstance(self.trainer.logger, WandbLogger) is True:
+            self.config[self.subcommand].trainer.logger.init_args.tags = add_tags(
+                self.config[self.subcommand]
+            )
 
 
 cli = SAMLightningCLI(
