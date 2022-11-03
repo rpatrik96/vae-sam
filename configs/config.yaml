@@ -1,13 +1,12 @@
-seed_everything: null
+# pytorch_lightning==1.8.0.post1
+seed_everything: true
 trainer:
   logger: true
-  checkpoint_callback: null
   enable_checkpointing: true
   callbacks: null
   default_root_dir: null
   gradient_clip_val: null
   gradient_clip_algorithm: null
-  process_position: 0
   num_nodes: 1
   num_processes: null
   devices: null
@@ -15,8 +14,6 @@ trainer:
   auto_select_gpus: false
   tpu_cores: null
   ipus: null
-  log_gpu_memory: null
-  progress_bar_refresh_rate: null
   enable_progress_bar: true
   overfit_batches: 0.0
   track_grad_norm: -1
@@ -33,15 +30,12 @@ trainer:
   limit_test_batches: null
   limit_predict_batches: null
   val_check_interval: null
-  flush_logs_every_n_steps: null
   log_every_n_steps: 50
   accelerator: null
   strategy: null
   sync_batchnorm: false
   precision: 32
   enable_model_summary: true
-  weights_summary: top
-  weights_save_path: null
   num_sanity_val_steps: 2
   resume_from_checkpoint: null
   profiler: null
@@ -52,14 +46,12 @@ trainer:
   replace_sampler_ddp: true
   detect_anomaly: false
   auto_scale_batch_size: false
-  prepare_data_per_node: null
   plugins: null
   amp_backend: native
   amp_level: null
   move_metrics_to_cpu: false
   multiple_trainloader_mode: max_size_cycle
-  stochastic_weight_avg: false
-  terminate_on_nan: null
+  inference_mode: true
 model:
   input_height: 32
   enc_type: resnet18
@@ -69,8 +61,11 @@ model:
   kl_coeff: 0.1
   latent_dim: 256
   lr: 0.0001
+  rho: 1.0
+  sam_update: false
+  norm_p: 2.0
 data:
-  data_dir: ../data/cifar10
+  data_dir: ./data/cifar10
   val_split: 0.2
   num_workers: 0
   normalize: false
@@ -82,7 +77,6 @@ data:
   train_transforms: null
   val_transforms: null
   test_transforms: null
-  dims: null
 notes: null
 tags: null
 early_stopping:
@@ -96,4 +90,5 @@ early_stopping:
   stopping_threshold: null
   divergence_threshold: null
   check_on_train_epoch_end: null
+  log_rank_zero_only: false
 ckpt_path: null
