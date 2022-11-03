@@ -1,6 +1,6 @@
 from pl_bolts.datamodules import CIFAR10DataModule
 from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
-from pytorch_lightning.utilities.cli import LightningCLI
+from pytorch_lightning.cli import LightningCLI
 
 from vae_sam.models.vae import VAE
 
