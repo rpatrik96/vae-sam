@@ -1,4 +1,4 @@
-from pl_bolts.datamodules import CIFAR10DataModule, TinyCIFAR10DataModule
+from pl_bolts.datamodules import CIFAR10DataModule
 from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
 from pytorch_lightning.cli import LightningCLI
 
@@ -39,7 +39,7 @@ class SAMLightningCLI(LightningCLI):
 
 cli = SAMLightningCLI(
     VAE,
-    TinyCIFAR10DataModule,
+    CIFAR10DataModule,
     save_config_callback=None,
     run=True,
     trainer_defaults={
