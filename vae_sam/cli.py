@@ -3,6 +3,7 @@ from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
 from pytorch_lightning.cli import LightningCLI
 
 from vae_sam.models.vae import VAE
+from vae_sam.utils import add_tags
 
 
 class SAMLightningCLI(LightningCLI):
@@ -28,6 +29,10 @@ class SAMLightningCLI(LightningCLI):
                 "early_stopping.mode": "min",
                 "early_stopping.patience": 5,
             }
+        )
+
+        self.config[self.subcommand].trainer.logger.init_args.tags = add_tags(
+            self.config[self.subcommand]
         )
 
 
