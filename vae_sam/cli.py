@@ -41,6 +41,13 @@ class SAMLightningCLI(LightningCLI):
                 self.config[self.subcommand]
             )
 
+    def before_fit(self):
+        if isinstance(self.trainer.logger, WandbLogger) is True:
+            if self.config[self.subcommand].model.offline is True:
+                self.trainer.logger.__dict__["_wandb_init"]["mode"] = "offline"
+            else:
+                self.trainer.logger.__dict__["_wandb_init"]["mode"] = "online"
+
 
 cli = SAMLightningCLI(
     VAE,

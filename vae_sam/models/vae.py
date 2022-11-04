@@ -1,7 +1,11 @@
+import subprocess
 import urllib.parse
 from argparse import ArgumentParser
+from os.path import dirname
 
+import pytorch_lightning as pl
 import torch
+import wandb
 from pl_bolts import _HTTPS_AWS_HUB
 from pl_bolts.models.autoencoders.components import (
     resnet18_decoder,
@@ -48,6 +52,7 @@ class VAE(LightningModule):
         rho=1.0,
         sam_update=False,
         norm_p=2.0,
+        offline=True,
         **kwargs,
     ):
         """
@@ -217,3 +222,17 @@ class VAE(LightningModule):
         parser.add_argument("--data_dir", type=str, default=".")
 
         return parser
+
+    def on_fit_end(self) -> None:
+
+        if (
+            isinstance(self.logger, pl.loggers.wandb.WandbLogger) is True
+            and self.hparams.offline is True
+        ):
+            # Syncing W&B at the end
+            # 1. save sync dir (after marking a run finished, the W&B object changes (is teared down?)
+            sync_dir = dirname(self.logger.experiment.dir)
+            # 2. mark run complete
+            wandb.finish()
+            # 3. call the sync command for the run directory
+            subprocess.check_call(["wandb", "sync", sync_dir])
