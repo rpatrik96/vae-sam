@@ -34,6 +34,7 @@ model:
   rho: 1.0
   sam_update: false
   norm_p: 2.0
+  offline: true
 data:
   data_dir: ./data/cifar10
   val_split: 0.2
