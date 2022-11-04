@@ -53,6 +53,7 @@ class VAE(LightningModule):
         sam_update=False,
         norm_p=2.0,
         offline=True,
+        sam_validation=True,
         **kwargs,
     ):
         """
@@ -159,9 +160,9 @@ class VAE(LightningModule):
     def rec_loss(
         self, z_mu: torch.Tensor, x: torch.Tensor, x_hat: torch.Tensor
     ) -> torch.Tensor:
-        if self.hparams.sam_update is False:
+        if self.hparams.sam_update is False or self.hparams.sam_validation is False:
             recon_loss = F.mse_loss(x_hat, x, reduction="mean")
-        elif self.hparams.sam_update is True:
+        elif self.hparams.sam_update is True and self.hparams.sam_validation is True:
 
             if self.training is False:
                 torch.set_grad_enabled(True)
@@ -178,6 +179,9 @@ class VAE(LightningModule):
             )
             if self.training is False:
                 torch.set_grad_enabled(False)
+
+        else:
+            raise NotImplementedError
 
         return recon_loss
 
