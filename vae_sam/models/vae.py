@@ -142,7 +142,7 @@ class VAE(LightningModule):
         x, y = batch
         z, z_mu, x_hat, p, q = self._run_step(x)
 
-        recon_loss = self.rec_loss(z_mu, x, x_hat)
+        recon_loss, recon_loss_sam = self.rec_loss(z_mu, x, x_hat)
 
         kl = torch.distributions.kl_divergence(q, p)
         kl = kl.mean()
@@ -152,6 +152,7 @@ class VAE(LightningModule):
 
         logs = {
             "recon_loss": recon_loss,
+            "recon_loss_sam": recon_loss_sam,
             "kl": kl,
             "loss": loss,
         }
@@ -159,10 +160,14 @@ class VAE(LightningModule):
 
     def rec_loss(
         self, z_mu: torch.Tensor, x: torch.Tensor, x_hat: torch.Tensor
-    ) -> torch.Tensor:
-        if self.hparams.sam_update is False or self.hparams.sam_validation is False:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        if self.hparams.sam_update is False:
             recon_loss = F.mse_loss(x_hat, x, reduction="mean")
-        elif self.hparams.sam_update is True and self.hparams.sam_validation is True:
+        else:
+            with torch.no_grad():
+                recon_loss = F.mse_loss(x_hat, x, reduction="mean")
+
+        if self.hparams.sam_update is True and self.hparams.sam_validation is True:
 
             if self.training is False:
                 torch.set_grad_enabled(True)
@@ -174,16 +179,16 @@ class VAE(LightningModule):
             scale = self.hparams.rho / dLdz.norm(
                 p=self.hparams.norm_p, dim=1, keepdim=True
             )
-            recon_loss = F.mse_loss(
+            recon_loss_sam = F.mse_loss(
                 self.decoder(z_mu + scale * dLdz), x, reduction="mean"
             )
             if self.training is False:
                 torch.set_grad_enabled(False)
 
         else:
-            raise NotImplementedError
+            recon_loss_sam = -1.0
 
-        return recon_loss
+        return recon_loss, recon_loss_sam
 
     def training_step(self, batch, batch_idx):
         loss, logs = self.step(batch, batch_idx)
