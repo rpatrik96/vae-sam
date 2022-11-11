@@ -148,7 +148,10 @@ class VAE(LightningModule):
         kl = kl.mean()
         kl *= self.kl_coeff
 
-        loss = kl + recon_loss
+        if self.hparams.sam_update is False:
+            loss = kl + recon_loss
+        else:
+            loss = kl + recon_loss_sam
 
         logs = {
             "recon_loss": recon_loss,
@@ -184,6 +187,7 @@ class VAE(LightningModule):
             )
             if self.training is False:
                 torch.set_grad_enabled(False)
+                recon_loss_sam.requires_grad = False
 
         else:
             recon_loss_sam = -1.0
