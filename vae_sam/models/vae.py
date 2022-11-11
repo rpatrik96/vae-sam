@@ -187,7 +187,7 @@ class VAE(LightningModule):
             )
             if self.training is False:
                 torch.set_grad_enabled(False)
-                recon_loss_sam.requires_grad = False
+                recon_loss_sam = recon_loss_sam.detach()
 
         else:
             recon_loss_sam = -1.0
