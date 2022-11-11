@@ -238,10 +238,7 @@ class VAE(LightningModule):
 
     def on_fit_end(self) -> None:
 
-        if (
-            isinstance(self.logger, pl.loggers.wandb.WandbLogger) is True
-            and self.hparams.offline is True
-        ):
+        if self.hparams.offline is True:
             # Syncing W&B at the end
             # 1. save sync dir (after marking a run finished, the W&B object changes (is teared down?)
             sync_dir = dirname(self.logger.experiment.dir)
