@@ -6,7 +6,7 @@ trainer:
     init_args:
       log_model: true
       project: sam_test
-      save_dir: sam_vae
+      save_dir: vae_sam
   enable_checkpointing: true
   enable_progress_bar: true
   overfit_batches: 0.0
