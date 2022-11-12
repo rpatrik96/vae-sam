@@ -11,7 +11,7 @@ trainer:
   enable_progress_bar: true
   overfit_batches: 0.0
   track_grad_norm: -1
-  check_val_every_n_epoch: 8
+  check_val_every_n_epoch: 15
   fast_dev_run: false
   max_epochs: null
   max_steps: -1
