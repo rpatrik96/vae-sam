@@ -14,3 +14,4 @@ torchmetrics~=0.10.2
 setuptools~=65.5.0
 torchvision~=0.14.0
 lightning-bolts~=0.6.0
+compressai~=1.2.1
