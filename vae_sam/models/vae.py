@@ -176,12 +176,8 @@ class VAE(LightningModule):
                 torch.set_grad_enabled(True)
                 z_mu.requires_grad = True
 
-            dLdz = torch.autograd.grad(
-                outputs=F.mse_loss(self.decoder(z_mu), x), inputs=z_mu
-            )[0].detach()
-            scale = self.hparams.rho / dLdz.norm(
-                p=self.hparams.norm_p, dim=1, keepdim=True
-            )
+            dLdz, scale = self.sam_step(x, z_mu)
+
             recon_loss_sam = F.mse_loss(
                 self.decoder(z_mu + scale * dLdz), x, reduction="mean"
             )
@@ -193,6 +189,13 @@ class VAE(LightningModule):
             recon_loss_sam = -1.0
 
         return recon_loss, recon_loss_sam
+
+    def sam_step(self, x, z_mu, loss=F.mse_loss):
+        dLdz = torch.autograd.grad(outputs=loss(self.decoder(z_mu), x), inputs=z_mu)[
+            0
+        ].detach()
+        scale = self.hparams.rho / dLdz.norm(p=self.hparams.norm_p, dim=1, keepdim=True)
+        return dLdz, scale
 
     def training_step(self, batch, batch_idx):
         loss, logs = self.step(batch, batch_idx)
