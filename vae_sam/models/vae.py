@@ -54,6 +54,7 @@ class VAE(LightningModule):
         norm_p=2.0,
         offline=True,
         sam_validation=True,
+        val_num_samples=torch.Size(),
         **kwargs,
     ):
         """
@@ -73,6 +74,9 @@ class VAE(LightningModule):
         super().__init__()
 
         self.save_hyperparameters()
+
+        if not isinstance(self.hparams.val_num_samples, torch.Size):
+            self.hparams.val_num_samples = torch.Size([self.hparams.val_num_samples])
 
         self.lr = lr
         self.kl_coeff = kl_coeff
@@ -129,7 +133,11 @@ class VAE(LightningModule):
         mu = self.fc_mu(x)
         log_var = self.fc_var(x)
         p, q, z = self.sample(mu, log_var, sample_shape=sample_shape)
-        return z, mu, self.decoder(z), p, q
+        if sample_shape == torch.Size():
+            x_hat = self.decoder(z)
+        else:
+            x_hat = [self.decoder(zz) for zz in z]
+        return z, mu, x_hat, p, q
 
     def sample(self, mu, log_var, sample_shape: torch.Size = torch.Size()):
         std = torch.exp(log_var / 2)
@@ -142,7 +150,19 @@ class VAE(LightningModule):
         x, y = batch
         z, z_mu, x_hat, p, q = self._run_step(x, sample_shape=sample_shape)
 
-        recon_loss, recon_loss_sam = self.rec_loss(z_mu, x, x_hat)
+        if sample_shape == torch.Size():
+            recon_loss, recon_loss_sam = self.rec_loss(z_mu, x, x_hat)
+        else:
+
+            recon_losses_tuple = [self.rec_loss(z_mu, x, x_hat_i) for x_hat_i in x_hat]
+            recon_losses = torch.stack([r[0] for r in recon_losses_tuple])
+            recon_losses_sam = torch.stack([r[1] for r in recon_losses_tuple])
+
+            recon_loss = recon_losses.mean()
+            recon_loss_std = recon_losses.std()
+
+            recon_loss_sam = recon_losses_sam.mean()
+            recon_loss_sam_std = recon_losses_sam.std()
 
         kl = torch.distributions.kl_divergence(q, p)
         kl = kl.mean()
@@ -159,6 +179,14 @@ class VAE(LightningModule):
             "kl": kl,
             "loss": loss,
         }
+
+        if sample_shape != torch.Size():
+            logs = {
+                **logs,
+                "recon_loss_std": recon_loss_std,
+                "recon_loss_sam_std": recon_loss_sam_std,
+            }
+
         return loss, logs
 
     def rec_loss(
@@ -203,7 +231,9 @@ class VAE(LightningModule):
         return loss
 
     def validation_step(self, batch, batch_idx):
-        loss, logs = self.step(batch, batch_idx)
+        loss, logs = self.step(
+            batch, batch_idx, sample_shape=self.hparams.val_num_samples
+        )
         self.log_dict({f"val_{k}": v for k, v in logs.items()})
         return loss
 
