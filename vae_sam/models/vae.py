@@ -155,8 +155,8 @@ class VAE(LightningModule):
         else:
 
             recon_losses_tuple = [self.rec_loss(z_mu, x, x_hat_i) for x_hat_i in x_hat]
-            recon_losses = torch.stack([r[0] for r in recon_losses_tuple])
-            recon_losses_sam = torch.stack([r[1] for r in recon_losses_tuple])
+            recon_losses = torch.tensor([r[0] for r in recon_losses_tuple])
+            recon_losses_sam = torch.tensor([r[1] for r in recon_losses_tuple])
 
             recon_loss = recon_losses.mean()
             recon_loss_std = recon_losses.std()

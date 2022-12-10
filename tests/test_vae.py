@@ -30,21 +30,6 @@ def test_sampling():
     assert z.shape[:2] == torch.Size([sample_shape[0], batch_size])
 
 
-def test_sampling():
-    batch_size = 8
-    sample_shape = torch.Size([4])
-    vae = VAE(sam_update=True)
-    x = torch.randn((batch_size, *CIFAR10DataModule.dims))
-
-    x = vae.encoder(x)
-    mu = vae.fc_mu(x)
-    log_var = vae.fc_var(x)
-
-    _, _, z = vae.sample(mu, log_var, sample_shape)
-
-    assert z.shape[:2] == torch.Size([sample_shape[0], batch_size])
-
-
 def test_sampled_rec_loss():
     batch_size = 8
     sample_shape = torch.Size([4])
