@@ -131,11 +131,11 @@ class VAE(LightningModule):
         p, q, z = self.sample(mu, log_var)
         return z, mu, self.decoder(z), p, q
 
-    def sample(self, mu, log_var):
+    def sample(self, mu, log_var, sample_shape: torch.Size = torch.Size()):
         std = torch.exp(log_var / 2)
         p = torch.distributions.Normal(torch.zeros_like(mu), torch.ones_like(std))
         q = torch.distributions.Normal(mu, std)
-        z = q.rsample()
+        z = q.rsample(sample_shape=sample_shape)
         return p, q, z
 
     def step(self, batch, batch_idx):
