@@ -138,9 +138,9 @@ class VAE(LightningModule):
         z = q.rsample(sample_shape=sample_shape)
         return p, q, z
 
-    def step(self, batch, batch_idx):
+    def step(self, batch, batch_idx, sample_shape: torch.Size = torch.Size()):
         x, y = batch
-        z, z_mu, x_hat, p, q = self._run_step(x)
+        z, z_mu, x_hat, p, q = self._run_step(x, sample_shape=sample_shape)
 
         recon_loss, recon_loss_sam = self.rec_loss(z_mu, x, x_hat)
 
