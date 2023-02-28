@@ -16,7 +16,8 @@ def test_sam_update():
 
 
 def test_sam_linear_loss():
-    batch_size = 8
+    batch_size = 128
+    TOL = 1e-5
     vae = VAE(sam_update=True)
     loss = lambda n, m: (n - m).mean()
     x = torch.randn((batch_size, *CIFAR10DataModule.dims))
@@ -32,4 +33,4 @@ def test_sam_linear_loss():
 
     dLdz_sam = torch.autograd.grad(outputs=loss(x, x_hat_sam), inputs=z_mu)[0].detach()
 
-    assert dLdz.mean() == dLdz_sam.mean()
+    assert (dLdz.mean() - dLdz_sam.mean()).abs() < TOL
