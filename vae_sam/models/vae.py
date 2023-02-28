@@ -49,7 +49,7 @@ class VAE(LightningModule):
         kl_coeff: float = 0.1,
         latent_dim: int = 256,
         lr: float = 1e-4,
-        rho=1.0,
+        rho=0.05,
         sam_update=False,
         norm_p=2.0,
         offline=True,
