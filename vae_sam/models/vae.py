@@ -55,6 +55,7 @@ class VAE(LightningModule):
         offline=True,
         sam_validation=True,
         val_num_samples=torch.Size(),
+        alpha=1.0,
         **kwargs,
     ):
         """
@@ -216,6 +217,8 @@ class VAE(LightningModule):
 
             rec_loss_no_sam = F.mse_loss(self.decoder(z_mu), x, reduction="mean")
 
+            self.assemble_alpha_sam_grad(dLdz, scale)
+
             rec_loss_sam = F.mse_loss(
                 self.decoder(z_mu + scale * dLdz), x, reduction="mean"
             )
@@ -227,6 +230,14 @@ class VAE(LightningModule):
             rec_loss_sam = rec_loss_no_sam = -1.0
 
         return rec_loss_vi, rec_loss_sam, rec_loss_no_sam
+
+    def assemble_alpha_sam_grad(self, dLdz, scale) -> torch.Tensor:
+        if self.hparams.alpha == 1.0:
+            return scale * dLdz
+        elif self.hparams.alpha == 0.0:
+            return -dLdz
+        else:
+            return dLdz + self.hparams.alpha * (scale * dLdz - dLdz)
 
     def sam_step(self, x, z_mu, loss=F.mse_loss):
         dLdz = torch.autograd.grad(outputs=loss(self.decoder(z_mu), x), inputs=z_mu)[
