@@ -15,7 +15,6 @@ def test_sam_update():
     assert recon_loss < recon_loss_sam
 
 
-
 def test_sam_linear_loss():
     batch_size = 128
     TOL = 1e-5
@@ -35,6 +34,7 @@ def test_sam_linear_loss():
     dLdz_sam = torch.autograd.grad(outputs=loss(x, x_hat_sam), inputs=z_mu)[0].detach()
 
     assert (dLdz.mean() - dLdz_sam.mean()).abs() < TOL
+
 
 def test_sampling():
     batch_size = 8
@@ -73,4 +73,3 @@ def test_sampled_rec_loss_step():
     y = None
 
     vae.step((x, y), batch_idx=0, sample_shape=vae.hparams.val_num_samples)
-
