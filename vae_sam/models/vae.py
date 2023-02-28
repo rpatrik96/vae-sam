@@ -150,6 +150,9 @@ class VAE(LightningModule):
         x, y = batch
         z, z_mu, x_hat, p, q = self._run_step(x, sample_shape=sample_shape)
 
+        # todo: log in bits
+        # (kl+mse.mean(img_dims)).mean(batch) -> convert to bits
+
         if sample_shape == torch.Size():
             recon_loss, recon_loss_sam = self.rec_loss(z_mu, x, x_hat)
         else:
