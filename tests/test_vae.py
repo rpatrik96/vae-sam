@@ -10,9 +10,9 @@ def test_sam_update():
     x = torch.randn((batch_size, *CIFAR10DataModule.dims))
 
     z, z_mu, x_hat, p, q = vae._run_step(x)
-    recon_loss, recon_loss_sam = vae.rec_loss(z_mu, x, x_hat)
+    rec_loss, rec_loss_sam, rec_loss_no_sam = vae.rec_loss(z_mu, x, x_hat)
 
-    assert recon_loss < recon_loss_sam
+    assert rec_loss_no_sam < rec_loss_sam
 
 
 def test_sam_linear_loss():
