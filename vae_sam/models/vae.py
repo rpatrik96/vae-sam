@@ -151,31 +151,38 @@ class VAE(LightningModule):
         z, z_mu, x_hat, p, q = self._run_step(x, sample_shape=sample_shape)
 
         if sample_shape == torch.Size():
-            recon_loss, recon_loss_sam = self.rec_loss(z_mu, x, x_hat)
+            recon_loss_vi, rec_loss_sam, recon_loss_no_sam = self.rec_loss(
+                z_mu, x, x_hat
+            )
         else:
 
-            recon_losses_tuple = [self.rec_loss(z_mu, x, x_hat_i) for x_hat_i in x_hat]
-            recon_losses = torch.tensor([r[0] for r in recon_losses_tuple])
-            recon_losses_sam = torch.tensor([r[1] for r in recon_losses_tuple])
+            rec_losses_tuple = [self.rec_loss(z_mu, x, x_hat_i) for x_hat_i in x_hat]
+            rec_losses_vi = torch.tensor([r[0] for r in rec_losses_tuple])
+            rec_losses_sam = torch.tensor([r[1] for r in rec_losses_tuple])
+            rec_losses_no_sam = torch.tensor([r[2] for r in rec_losses_tuple])
 
-            recon_loss = recon_losses.mean()
-            recon_loss_std = recon_losses.std()
+            rec_loss_vi = rec_losses_vi.mean()
+            rec_loss_std = rec_losses_vi.std()
 
-            recon_loss_sam = recon_losses_sam.mean()
-            recon_loss_sam_std = recon_losses_sam.std()
+            rec_loss_sam = rec_losses_sam.mean()
+            rec_loss_sam_std = rec_losses_sam.std()
+
+            rec_loss_no_sam = rec_losses_no_sam.mean()
+            rec_loss_no_sam_std = rec_losses_no_sam.std()
 
         kl = torch.distributions.kl_divergence(q, p)
         kl = kl.mean()
         kl *= self.kl_coeff
 
         if self.hparams.sam_update is False:
-            loss = kl + recon_loss
+            loss = kl + rec_loss_vi
         else:
-            loss = kl + recon_loss_sam
+            loss = kl + rec_loss_sam
 
         logs = {
-            "recon_loss": recon_loss,
-            "recon_loss_sam": recon_loss_sam,
+            "recon_loss": rec_loss_vi,
+            "recon_loss_sam": rec_loss_sam,
+            "recon_loss_no_sam": rec_loss_no_sam,
             "kl": kl,
             "loss": loss,
         }
@@ -183,20 +190,21 @@ class VAE(LightningModule):
         if sample_shape != torch.Size():
             logs = {
                 **logs,
-                "recon_loss_std": recon_loss_std,
-                "recon_loss_sam_std": recon_loss_sam_std,
+                "recon_loss_std": rec_loss_std,
+                "recon_loss_sam_std": rec_loss_sam_std,
+                "recon_loss_no_sam_std": rec_loss_no_sam_std,
             }
 
         return loss, logs
 
     def rec_loss(
         self, z_mu: torch.Tensor, x: torch.Tensor, x_hat: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         if self.hparams.sam_update is False:
-            recon_loss = F.mse_loss(x_hat, x, reduction="mean")
+            rec_loss_vi = F.mse_loss(x_hat, x, reduction="mean")
         else:
             with torch.no_grad():
-                recon_loss = F.mse_loss(x_hat, x, reduction="mean")
+                rec_loss_vi = F.mse_loss(x_hat, x, reduction="mean")
 
         if self.hparams.sam_update is True and self.hparams.sam_validation is True:
 
@@ -206,17 +214,19 @@ class VAE(LightningModule):
 
             dLdz, scale = self.sam_step(x, z_mu)
 
-            recon_loss_sam = F.mse_loss(
+            rec_loss_no_sam = F.mse_loss(self.decoder(z_mu), x, reduction="mean")
+
+            rec_loss_sam = F.mse_loss(
                 self.decoder(z_mu + scale * dLdz), x, reduction="mean"
             )
             if self.training is False:
                 torch.set_grad_enabled(False)
-                recon_loss_sam = recon_loss_sam.detach()
+                rec_loss_sam = rec_loss_sam.detach()
 
         else:
-            recon_loss_sam = -1.0
+            rec_loss_sam = rec_loss_no_sam = -1.0
 
-        return recon_loss, recon_loss_sam
+        return rec_loss_vi, rec_loss_sam, rec_loss_no_sam
 
     def sam_step(self, x, z_mu, loss=F.mse_loss):
         dLdz = torch.autograd.grad(outputs=loss(self.decoder(z_mu), x), inputs=z_mu)[
