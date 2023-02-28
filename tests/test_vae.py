@@ -36,6 +36,28 @@ def test_sam_linear_loss():
     assert (dLdz.mean() - dLdz_sam.mean()).abs() < TOL
 
 
+def test_alpha_sam():
+    batch_size = 128
+    TOL = 2e-7
+    vae = VAE(sam_update=True)
+
+    x = torch.randn((batch_size, *CIFAR10DataModule.dims))
+
+    z, z_mu, x_hat, p, q = vae._run_step(x)
+
+    dLdz, scale = vae.sam_step(x, z_mu)
+
+    # SGD
+    vae.hparams.alpha = 0.0
+    grad = vae.assemble_alpha_sam_grad(dLdz, scale)
+    assert (grad + dLdz).mean().abs() < TOL
+
+    # SAM
+    vae.hparams.alpha = 1.0
+    grad = vae.assemble_alpha_sam_grad(dLdz, scale)
+    assert (grad - scale * dLdz).mean().abs() < TOL
+
+
 def test_sampling():
     batch_size = 8
     sample_shape = torch.Size([4])
