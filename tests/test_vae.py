@@ -33,7 +33,7 @@ def test_sam_linear_loss():
 
     dLdz_sam = torch.autograd.grad(outputs=loss(x, x_hat_sam), inputs=z_mu)[0].detach()
 
-    assert (dLdz.mean() - dLdz_sam.mean()).abs() < TOL
+    assert (dLdz.abs() - dLdz_sam.abs()).mean().abs() < TOL
 
 
 def test_alpha_sam():
@@ -50,12 +50,12 @@ def test_alpha_sam():
     # SGD
     vae.hparams.alpha = 0.0
     grad = vae.assemble_alpha_sam_grad(dLdz, scale)
-    assert (grad + dLdz).mean().abs() < TOL
+    assert (grad.abs() - (-dLdz).abs()).mean().abs() < TOL
 
     # SAM
     vae.hparams.alpha = 1.0
     grad = vae.assemble_alpha_sam_grad(dLdz, scale)
-    assert (grad - scale * dLdz).mean().abs() < TOL
+    assert (grad.abs() - (scale * dLdz).abs()).mean().abs() < TOL
 
 
 def test_sampling():

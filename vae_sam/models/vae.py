@@ -227,6 +227,7 @@ class VAE(LightningModule):
                 rec_loss_sam = rec_loss_sam.detach()
 
         else:
+
             rec_loss_sam = rec_loss_no_sam = -1.0
 
         return rec_loss_vi, rec_loss_sam, rec_loss_no_sam
