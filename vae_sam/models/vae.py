@@ -153,7 +153,7 @@ class VAE(LightningModule):
         z, z_mu, log_var, x_hat, p, q = self._run_step(x, sample_shape=sample_shape)
 
         if sample_shape == torch.Size():
-            recon_loss_vi, rec_loss_sam, recon_loss_no_sam = self.rec_loss(
+            rec_loss_vi, rec_loss_sam, rec_loss_no_sam = self.rec_loss(
                 z_mu, log_var, x, x_hat
             )
         else:
