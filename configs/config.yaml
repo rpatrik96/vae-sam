@@ -1,5 +1,5 @@
 # pytorch_lightning==1.8.0.post1
-seed_everything: true
+seed_everything: 42
 trainer:
   logger:
     class_path: pytorch_lightning.loggers.WandbLogger
