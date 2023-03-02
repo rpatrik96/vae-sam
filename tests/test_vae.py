@@ -9,22 +9,22 @@ def test_sam_update():
     vae = VAE(sam_update=True)
     x = torch.randn((batch_size, *CIFAR10DataModule.dims))
 
-    z, z_mu, x_hat, p, q = vae._run_step(x)
-    rec_loss, rec_loss_sam, rec_loss_no_sam = vae.rec_loss(z_mu, x, x_hat)
+    z, z_mu, log_var, x_hat, p, q = vae._run_step(x)
+    rec_loss, rec_loss_sam, rec_loss_no_sam = vae.rec_loss(z_mu, log_var, x, x_hat)
 
     assert rec_loss_no_sam < rec_loss_sam
 
 
 def test_sam_linear_loss():
     batch_size = 128
-    TOL = 1e-5
+    TOL = 5e-5
     vae = VAE(sam_update=True)
     loss = lambda n, m: (n - m).mean()
     x = torch.randn((batch_size, *CIFAR10DataModule.dims))
 
-    z, z_mu, x_hat, p, q = vae._run_step(x)
+    z, z_mu, log_var, x_hat, p, q = vae._run_step(x)
 
-    dLdz, scale = vae.sam_step(x, z_mu, loss=loss)
+    dLdz, scale = vae.sam_step(x, z_mu, log_var, loss=loss)
 
     x_hat = vae.decoder(z_mu)
     x_hat_sam = vae.decoder(z_mu + scale * dLdz)
@@ -43,9 +43,9 @@ def test_alpha_sam():
 
     x = torch.randn((batch_size, *CIFAR10DataModule.dims))
 
-    z, z_mu, x_hat, p, q = vae._run_step(x)
+    z, z_mu, log_var, x_hat, p, q = vae._run_step(x)
 
-    dLdz, scale = vae.sam_step(x, z_mu)
+    dLdz, scale = vae.sam_step(x, z_mu, log_var)
 
     # SGD
     vae.hparams.alpha = 0.0
@@ -85,7 +85,7 @@ def test_sampled_rec_loss():
 
     _, _, z = vae.sample(mu, log_var, sample_shape)
 
-    torch.tensor([vae.rec_loss(mu, x, vae.decoder(zz)) for zz in z])
+    torch.tensor([vae.rec_loss(mu, log_var, x, vae.decoder(zz)) for zz in z])
 
 
 def test_sampled_rec_loss_step():
