@@ -5,7 +5,7 @@ from vae_sam.models.vae import VAE
 
 
 def test_sam_update():
-    batch_size = 8
+    batch_size = 128
     vae = VAE(sam_update=True)
     x = torch.randn((batch_size, *CIFAR10DataModule.dims))
 
