@@ -18,6 +18,8 @@ from torch import nn
 from torch.nn import functional as F
 import math
 
+from functorch import vmap
+
 
 class VAE(LightningModule):
     """Standard VAE with Gaussian Prior and approx posterior.
@@ -229,7 +231,7 @@ class VAE(LightningModule):
                     z_mu
                     + scale
                     * math.sqrt(self.hparams.alpha)
-                    * log_var.exp().sqrt()
+                    * log_var.exp().sqrt().mean(dim=0, keepdim=True)
                     * dLdz
                 ),
                 x,
@@ -257,7 +259,7 @@ class VAE(LightningModule):
             0
         ].detach()
 
-        dLdz = log_var.exp().sqrt().detach() * dLdz
+        dLdz = log_var.exp().sqrt().mean(dim=0, keepdim=True).detach() * dLdz
         scale = math.sqrt(self.hparams.latent_dim) / dLdz.norm(
             p=self.hparams.norm_p, dim=1, keepdim=True
         )
