@@ -1,8 +1,8 @@
 coverage
 codecov
-pytest
-pytest-cov
-pytest-flake8
+pytest~=7.2.1
+pytest-cov~=4.0.0
+pytest-flake8~=1.1.1
 flake8
 check-manifest
-black
+black~=23.1.0
