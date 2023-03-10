@@ -218,7 +218,15 @@ class VAE(LightningModule):
         if self.hparams.sam_update is False:
             rec_loss_vi = F.mse_loss(x_hat, x, reduction="mean")
 
+            if self.training is False:
+                torch.set_grad_enabled(True)
+                z_mu.requires_grad = True
+
             _, scale = self.sam_step(x, z_mu, log_var)
+
+            if self.training is False:
+                torch.set_grad_enabled(False)
+
         else:
             with torch.no_grad():
                 rec_loss_vi = F.mse_loss(x_hat, x, reduction="mean")
