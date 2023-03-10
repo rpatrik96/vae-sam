@@ -230,7 +230,9 @@ class VAE(LightningModule):
 
             dLdz, scale = self.sam_step(x, z_mu, log_var)
 
-            rec_loss_no_sam = F.mse_loss(self.decoder(z_mu), x, reduction="mean")
+            rec_loss_no_sam = F.mse_loss(
+                self.decoder(z_mu), x, reduction="mean"
+            ).detach()
 
             self.assemble_alpha_sam_grad(dLdz, scale)
 
