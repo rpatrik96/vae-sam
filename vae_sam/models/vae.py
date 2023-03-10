@@ -155,7 +155,7 @@ class VAE(LightningModule):
         z, z_mu, log_var, x_hat, p, q = self._run_step(x, sample_shape=sample_shape)
 
         if sample_shape == torch.Size():
-            rec_loss_vi, rec_loss_sam, rec_loss_no_sam = self.rec_loss(
+            rec_loss_vi, rec_loss_sam, rec_loss_no_sam, scale = self.rec_loss(
                 z_mu, log_var, x, x_hat
             )
         else:
@@ -165,15 +165,19 @@ class VAE(LightningModule):
             rec_losses_vi = torch.tensor([r[0] for r in rec_losses_tuple])
             rec_losses_sam = torch.tensor([r[1] for r in rec_losses_tuple])
             rec_losses_no_sam = torch.tensor([r[2] for r in rec_losses_tuple])
+            scales = torch.tensor([r[3].mean() for r in rec_losses_tuple])
 
             rec_loss_vi = rec_losses_vi.mean()
-            rec_loss_std = rec_losses_vi.std()
+            rec_loss_std = rec_losses_vi.std(dim=0)
 
             rec_loss_sam = rec_losses_sam.mean()
-            rec_loss_sam_std = rec_losses_sam.std()
+            rec_loss_sam_std = rec_losses_sam.std(dim=0)
 
             rec_loss_no_sam = rec_losses_no_sam.mean()
-            rec_loss_no_sam_std = rec_losses_no_sam.std()
+            rec_loss_no_sam_std = rec_losses_no_sam.std(dim=0)
+
+            scale = scales.mean()
+            scale_std = scales.std(dim=0)
 
         kl = torch.distributions.kl_divergence(q, p)
         kl = kl.mean()
@@ -190,6 +194,7 @@ class VAE(LightningModule):
             "recon_loss_no_sam": rec_loss_no_sam,
             "kl": kl,
             "loss": loss,
+            "scale": scale,
         }
 
         if sample_shape != torch.Size():
@@ -198,6 +203,7 @@ class VAE(LightningModule):
                 "recon_loss_std": rec_loss_std,
                 "recon_loss_sam_std": rec_loss_sam_std,
                 "recon_loss_no_sam_std": rec_loss_no_sam_std,
+                "scale_std": scale_std,
             }
 
         return loss, logs
@@ -208,21 +214,27 @@ class VAE(LightningModule):
         log_var: torch.Tensor,
         x: torch.Tensor,
         x_hat: torch.Tensor,
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         if self.hparams.sam_update is False:
             rec_loss_vi = F.mse_loss(x_hat, x, reduction="mean")
         else:
             with torch.no_grad():
                 rec_loss_vi = F.mse_loss(x_hat, x, reduction="mean")
 
-        if self.hparams.sam_update is True and self.hparams.sam_validation is True:
+        if (
+            self.hparams.sam_update is True
+            and self.hparams.sam_validation is True
+            or self.training is False
+        ):
             if self.training is False:
                 torch.set_grad_enabled(True)
                 z_mu.requires_grad = True
 
             dLdz, scale = self.sam_step(x, z_mu, log_var)
 
-            rec_loss_no_sam = F.mse_loss(self.decoder(z_mu), x, reduction="mean")
+            rec_loss_no_sam = F.mse_loss(
+                self.decoder(z_mu), x, reduction="mean"
+            ).detach()
 
             self.assemble_alpha_sam_grad(dLdz, scale)
 
@@ -231,20 +243,21 @@ class VAE(LightningModule):
                     z_mu
                     + scale
                     * math.sqrt(self.hparams.alpha)
-                    * log_var.exp().sqrt().mean(dim=0, keepdim=True)
+                    * log_var.exp().sqrt()
                     * dLdz
                 ),
                 x,
                 reduction="mean",
             )
+
             if self.training is False:
                 torch.set_grad_enabled(False)
                 rec_loss_sam = rec_loss_sam.detach()
 
         else:
-            rec_loss_sam = rec_loss_no_sam = -1.0
+            rec_loss_sam = rec_loss_no_sam = scale = torch.FloatTensor([-1.0])
 
-        return rec_loss_vi, rec_loss_sam, rec_loss_no_sam
+        return rec_loss_vi, rec_loss_sam, rec_loss_no_sam, scale.detach().mean()
 
     def assemble_alpha_sam_grad(self, dLdz, scale) -> torch.Tensor:
         if self.hparams.alpha == 1.0:
