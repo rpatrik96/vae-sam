@@ -255,7 +255,7 @@ class VAE(LightningModule):
                 rec_loss_sam = rec_loss_sam.detach()
 
         else:
-            rec_loss_sam = rec_loss_no_sam = scale = torch.Tensor(-1.0)
+            rec_loss_sam = rec_loss_no_sam = scale = torch.FloatTensor([-1.0])
 
         return rec_loss_vi, rec_loss_sam, rec_loss_no_sam, scale.detach().mean()
 
