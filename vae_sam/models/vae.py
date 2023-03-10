@@ -217,16 +217,6 @@ class VAE(LightningModule):
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         if self.hparams.sam_update is False:
             rec_loss_vi = F.mse_loss(x_hat, x, reduction="mean")
-
-            if self.training is False:
-                torch.set_grad_enabled(True)
-                z_mu.requires_grad = True
-
-            _, scale = self.sam_step(x, z_mu, log_var)
-
-            if self.training is False:
-                torch.set_grad_enabled(False)
-
         else:
             with torch.no_grad():
                 rec_loss_vi = F.mse_loss(x_hat, x, reduction="mean")
@@ -265,7 +255,7 @@ class VAE(LightningModule):
                 rec_loss_sam = rec_loss_sam.detach()
 
         else:
-            rec_loss_sam = rec_loss_no_sam = -1.0
+            rec_loss_sam = rec_loss_no_sam = scale = torch.Tensor(-1.0)
 
         return rec_loss_vi, rec_loss_sam, rec_loss_no_sam, scale.detach().mean()
 
