@@ -241,7 +241,7 @@ class VAE(LightningModule):
                     z_mu
                     + scale
                     * math.sqrt(self.hparams.alpha)
-                    * log_var.exp().sqrt().mean(dim=0, keepdim=True)
+                    * log_var.exp().sqrt()
                     * dLdz
                 ),
                 x,
