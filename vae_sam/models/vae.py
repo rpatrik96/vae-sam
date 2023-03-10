@@ -247,6 +247,7 @@ class VAE(LightningModule):
                 x,
                 reduction="mean",
             )
+
             if self.training is False:
                 torch.set_grad_enabled(False)
                 rec_loss_sam = rec_loss_sam.detach()
@@ -254,7 +255,7 @@ class VAE(LightningModule):
         else:
             rec_loss_sam = rec_loss_no_sam = -1.0
 
-        return rec_loss_vi, rec_loss_sam, rec_loss_no_sam, scale
+        return rec_loss_vi, rec_loss_sam, rec_loss_no_sam, scale.detach().mean()
 
     def assemble_alpha_sam_grad(self, dLdz, scale) -> torch.Tensor:
         if self.hparams.alpha == 1.0:
