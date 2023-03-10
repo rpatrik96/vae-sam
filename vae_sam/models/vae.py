@@ -168,10 +168,10 @@ class VAE(LightningModule):
             scales = torch.tensor([r[3].mean() for r in rec_losses_tuple])
 
             rec_loss_vi = rec_losses_vi.mean()
-            rec_loss_std = rec_losses_vi.std()
+            rec_loss_std = rec_losses_vi.std(dim=0)
 
             rec_loss_sam = rec_losses_sam.mean()
-            rec_loss_sam_std = rec_losses_sam.std()
+            rec_loss_sam_std = rec_losses_sam.std(dim=0)
 
             rec_loss_no_sam = rec_losses_no_sam.mean()
             rec_loss_no_sam_std = rec_losses_no_sam.std(dim=0)
@@ -214,9 +214,11 @@ class VAE(LightningModule):
         log_var: torch.Tensor,
         x: torch.Tensor,
         x_hat: torch.Tensor,
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         if self.hparams.sam_update is False:
             rec_loss_vi = F.mse_loss(x_hat, x, reduction="mean")
+            with torch.no_grad():
+                _, scale = self.sam_step(x, z_mu, log_var)
         else:
             with torch.no_grad():
                 rec_loss_vi = F.mse_loss(x_hat, x, reduction="mean")
@@ -250,7 +252,7 @@ class VAE(LightningModule):
         else:
             rec_loss_sam = rec_loss_no_sam = -1.0
 
-        return rec_loss_vi, rec_loss_sam, rec_loss_no_sam
+        return rec_loss_vi, rec_loss_sam, rec_loss_no_sam, scale
 
     def assemble_alpha_sam_grad(self, dLdz, scale) -> torch.Tensor:
         if self.hparams.alpha == 1.0:
