@@ -223,7 +223,11 @@ class VAE(LightningModule):
             with torch.no_grad():
                 rec_loss_vi = F.mse_loss(x_hat, x, reduction="mean")
 
-        if self.hparams.sam_update is True and self.hparams.sam_validation is True:
+        if (
+            self.hparams.sam_update is True
+            and self.hparams.sam_validation is True
+            or self.training is False
+        ):
             if self.training is False:
                 torch.set_grad_enabled(True)
                 z_mu.requires_grad = True
