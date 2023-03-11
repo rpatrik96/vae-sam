@@ -6,8 +6,8 @@ command:
   - "--config"
   - "configs/config.yaml"
   - ${args}
-entity: ima-vae
-project: dsprites
+entity: causal-representation-learning
+project: sam_test
 method: grid
 metric:
   goal: minimize
