@@ -66,7 +66,7 @@ def test_sampling():
 
     x = vae.encoder(x)
     mu = vae.fc_mu(x)
-    std = vae.fc_var(x)
+    std = vae.calc_enc_std(x)
 
     _, _, z = vae.sample(mu, std, sample_shape)
 
@@ -81,7 +81,7 @@ def test_sampled_rec_loss():
 
     xx = vae.encoder(x)
     mu = vae.fc_mu(xx)
-    std = vae.fc_var(xx)
+    std = vae.calc_enc_std(xx)
 
     _, _, z = vae.sample(mu, std, sample_shape)
 
