@@ -99,7 +99,6 @@ def test_sampled_rec_loss_step():
 
 def test_fix_enc_var():
     batch_size = 8
-    latent_dim = 16
     enc_var = 1.0
     vae = VAE(sam_update=True, enc_var=enc_var)
 
@@ -109,3 +108,18 @@ def test_fix_enc_var():
     std = vae.calc_enc_std(xx)
 
     assert std.requires_grad == False
+
+
+def test_rae_kl():
+    batch_size = 8
+    enc_var = 1.0
+    vae = VAE(sam_update=True, enc_var=enc_var, rae_update=True)
+
+    x = torch.randn((batch_size, *CIFAR10DataModule.dims))
+
+    x = vae.encoder(x)
+    z_mu = vae.fc_mu(x)
+
+    kl = vae.calc_kl_loss(None, None, z_mu)
+
+    assert kl == vae.kl_coeff * z_mu.norm(p=2.0) / 2.0

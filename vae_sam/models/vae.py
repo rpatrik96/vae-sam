@@ -51,14 +51,15 @@ class VAE(LightningModule):
         kl_coeff: float = 0.1,
         latent_dim: int = 256,
         lr: float = 1e-4,
-        rho=0.05,
-        sam_update=False,
-        norm_p=2.0,
-        offline=True,
-        sam_validation=True,
-        val_num_samples=torch.Size(),
-        alpha=1.0,
+        rho: float = 0.05,
+        sam_update: bool = False,
+        norm_p: float = 2.0,
+        offline: bool = True,
+        sam_validation: bool = True,
+        val_num_samples: torch.Size = torch.Size(),
+        alpha: float = 1.0,
         enc_var: Optional[float] = None,
+        rae_update: bool = False,
         **kwargs,
     ):
         """
@@ -77,12 +78,15 @@ class VAE(LightningModule):
 
         super().__init__()
 
-        self.save_hyperparameters()
-
-        if self.hparams.enc_var is not None:
-            if isinstance(self.hparams.enc_var, float):
-                if self.hparams.enc_var <= 0:
+        if enc_var is not None:
+            if isinstance(enc_var, float):
+                if enc_var <= 0:
                     raise ValueError(f"{enc_var=}should be positive!")
+
+        if enc_var is None and rae_update is True:
+            raise ValueError(f"enc_var should be fixed when {rae_update=}!")
+
+        self.save_hyperparameters()
 
         if not isinstance(self.hparams.val_num_samples, torch.Size):
             self.hparams.val_num_samples = torch.Size([self.hparams.val_num_samples])
@@ -164,11 +168,18 @@ class VAE(LightningModule):
         mu: torch.Tensor,
         std: torch.Tensor,
         sample_shape: torch.Size = torch.Size(),
-    ):
-
-        p = torch.distributions.Normal(torch.zeros_like(mu), torch.ones_like(std))
-        q = torch.distributions.Normal(mu, std)
-        z = q.rsample(sample_shape=sample_shape)
+    ) -> tuple[
+        Optional[torch.distributions.Normal],
+        Optional[torch.distributions.Normal],
+        torch.tensor,
+    ]:
+        if self.hparams.rae_update is False:
+            p = torch.distributions.Normal(torch.zeros_like(mu), torch.ones_like(std))
+            q = torch.distributions.Normal(mu, std)
+            z = q.rsample(sample_shape=sample_shape)
+        else:
+            p = q = None
+            z = mu
         return p, q, z
 
     def step(self, batch, batch_idx, sample_shape: torch.Size = torch.Size()):
@@ -200,9 +211,7 @@ class VAE(LightningModule):
             scale = scales.mean()
             scale_std = scales.std(dim=0)
 
-        kl = torch.distributions.kl_divergence(q, p)
-        kl = kl.mean()
-        kl *= self.kl_coeff
+        kl = self.calc_kl_loss(p, q, z_mu)
 
         if self.hparams.sam_update is False:
             loss = kl + rec_loss_vi
@@ -228,6 +237,18 @@ class VAE(LightningModule):
             }
 
         return loss, logs
+
+    def calc_kl_loss(
+        self,
+        p: Optional[torch.distributions.Normal],
+        q: Optional[torch.distributions.Normal],
+        z_mu: torch.Tensor,
+    ) -> torch.Tensor:
+        if self.hparams.rae_update is False:
+            kl = torch.distributions.kl_divergence(q, p).mean()
+        else:
+            kl = z_mu.norm(p=2.0) / 2.0
+        return self.kl_coeff * kl
 
     def rec_loss(
         self,
