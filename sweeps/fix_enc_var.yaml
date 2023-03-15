@@ -1,0 +1,29 @@
+command:
+  - ${env}
+  - python3
+  - vae_sam/cli.py
+  - fit
+  - "--config"
+  - "configs/config.yaml"
+  - ${args}
+entity: causal-representation-learning
+project: sam_test
+method: grid
+metric:
+  goal: minimize
+  name: val_loss
+parameters:
+  trainer.max_epochs:
+    value: 500
+  trainer.gpus:
+    value: 1
+  data.batch_size:
+    value: 256
+  model.sam_update:
+    values: [false,true]
+  model.enc_var:
+    values: [1, 1e-2, 1e-4, 1e-6]
+  model.offline:
+    value: false
+  seed_everything:
+    values: [42, 64, 982, 5748, 23567]
