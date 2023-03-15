@@ -79,9 +79,9 @@ def test_sampled_rec_loss():
     vae = VAE(sam_update=True)
     x = torch.randn((batch_size, *CIFAR10DataModule.dims))
 
-    xx = vae.encoder(x)
-    mu = vae.fc_mu(xx)
-    std = vae.calc_enc_std(xx)
+    x = vae.encoder(x)
+    mu = vae.fc_mu(x)
+    std = vae.calc_enc_std(x)
 
     _, _, z = vae.sample(mu, std, sample_shape)
 
@@ -104,8 +104,8 @@ def test_fix_enc_var():
 
     x = torch.randn((batch_size, *CIFAR10DataModule.dims))
 
-    xx = vae.encoder(x)
-    std = vae.calc_enc_std(xx)
+    x = vae.encoder(x)
+    std = vae.calc_enc_std(x)
 
     assert std.requires_grad == False
 

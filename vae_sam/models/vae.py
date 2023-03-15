@@ -55,7 +55,6 @@ class VAE(LightningModule):
         sam_update: bool = False,
         norm_p: float = 2.0,
         offline: bool = True,
-        sam_validation: bool = True,
         val_num_samples: torch.Size = torch.Size(),
         alpha: float = 1.0,
         enc_var: Optional[float] = None,
@@ -285,11 +284,7 @@ class VAE(LightningModule):
             with torch.no_grad():
                 rec_loss_vi = F.mse_loss(x_hat, x, reduction="mean")
 
-        if (
-            self.hparams.sam_update is True
-            and self.hparams.sam_validation is True
-            or self.training is False
-        ):
+        if self.hparams.sam_update is True or self.training is False:
             if self.training is False:
                 torch.set_grad_enabled(True)
                 z_mu.requires_grad = True
