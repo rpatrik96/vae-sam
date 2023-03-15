@@ -123,3 +123,17 @@ def test_rae_kl():
     kl = vae.calc_kl_loss(None, None, z_mu)
 
     assert kl == vae.kl_coeff * z_mu.norm(p=2.0) / 2.0
+
+
+def test_decoder_jacobian_shape():
+    batch_size = 8
+    vae = VAE(sam_update=False)
+
+    x = torch.randn((batch_size, *CIFAR10DataModule.dims))
+
+    xx = vae.encoder(x)
+    z_mu = vae.fc_mu(xx)
+
+    assert vae._decoder_jacobian(x, z_mu).shape == torch.Size(
+        [batch_size, vae.hparams.latent_dim]
+    )
