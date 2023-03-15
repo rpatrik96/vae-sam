@@ -96,6 +96,9 @@ class VAE(LightningModule):
         self.latent_dim = latent_dim
         self.input_height = input_height
 
+        self._setup_networks(enc_type, first_conv, maxpool1)
+
+    def _setup_networks(self, enc_type, first_conv, maxpool1):
         valid_encoders = {
             "resnet18": {
                 "enc": resnet18_encoder,
@@ -106,7 +109,6 @@ class VAE(LightningModule):
                 "dec": resnet50_decoder,
             },
         }
-
         if enc_type not in valid_encoders:
             self.encoder = resnet18_encoder(first_conv, maxpool1)
             self.decoder = resnet18_decoder(
@@ -117,7 +119,6 @@ class VAE(LightningModule):
             self.decoder = valid_encoders[enc_type]["dec"](
                 self.latent_dim, self.input_height, first_conv, maxpool1
             )
-
         self.fc_mu = nn.Linear(self.enc_out_dim, self.latent_dim)
         self.fc_var = nn.Linear(self.enc_out_dim, self.latent_dim)
 
