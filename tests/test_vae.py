@@ -4,15 +4,25 @@ from pl_bolts.datamodules import CIFAR10DataModule
 from vae_sam.models.vae import VAE
 
 
-def test_sam_update():
+def test_sam_run_step():
     batch_size = 128
     vae = VAE(sam_update=True)
     x = torch.randn((batch_size, *CIFAR10DataModule.dims))
 
-    z, z_mu, log_var, x_hat, p, q = vae._run_step(x)
-    rec_loss, rec_loss_sam, rec_loss_no_sam, _ = vae.rec_loss(z_mu, log_var, x, x_hat)
+    z, z_mu, std, x_hat, _, _ = vae._run_step(x)
+    rec_loss, rec_loss_sam, rec_loss_no_sam, _ = vae.rec_loss(z_mu, std, x, x_hat)
 
     assert rec_loss_no_sam < rec_loss_sam
+
+
+def test_rae_run_step():
+    batch_size = 128
+    vae = VAE(rae_update=True, enc_var=1.0)
+    x = torch.randn((batch_size, *CIFAR10DataModule.dims))
+
+    z, z_mu, _, _, _, _ = vae._run_step(x)
+
+    assert torch.allclose(z, z_mu)
 
 
 def test_sam_linear_loss():

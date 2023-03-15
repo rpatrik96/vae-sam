@@ -58,6 +58,7 @@ class VAE(LightningModule):
         val_num_samples: torch.Size = torch.Size(),
         enc_var: Optional[float] = None,
         rae_update: bool = False,
+        rec_loss=F.mse_loss,
         **kwargs,
     ):
         """
@@ -156,6 +157,10 @@ class VAE(LightningModule):
         mu = self.fc_mu(x)
         std = self.calc_enc_std(x)
         p, q, z = self.sample(mu, std, sample_shape=sample_shape)
+
+        if self.hparams.rae_update is True:
+            z = mu
+
         if sample_shape == torch.Size():
             x_hat = self.decoder(z)
         else:
