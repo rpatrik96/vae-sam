@@ -186,30 +186,16 @@ class VAE(LightningModule):
         x, y = batch
         z, z_mu, std, x_hat, p, q = self._run_step(x, sample_shape=sample_shape)
 
-        if sample_shape == torch.Size():
-            rec_loss_vi, rec_loss_sam, rec_loss_no_sam, scale = self.rec_loss(
-                z_mu, std, x, x_hat
-            )
-        else:
-            rec_losses_tuple = [
-                self.rec_loss(z_mu, std, x, x_hat_i) for x_hat_i in x_hat
-            ]
-            rec_losses_vi = torch.tensor([r[0] for r in rec_losses_tuple])
-            rec_losses_sam = torch.tensor([r[1] for r in rec_losses_tuple])
-            rec_losses_no_sam = torch.tensor([r[2] for r in rec_losses_tuple])
-            scales = torch.tensor([r[3].mean() for r in rec_losses_tuple])
-
-            rec_loss_vi = rec_losses_vi.mean()
-            rec_loss_std = rec_losses_vi.std(dim=0)
-
-            rec_loss_sam = rec_losses_sam.mean()
-            rec_loss_sam_std = rec_losses_sam.std(dim=0)
-
-            rec_loss_no_sam = rec_losses_no_sam.mean()
-            rec_loss_no_sam_std = rec_losses_no_sam.std(dim=0)
-
-            scale = scales.mean()
-            scale_std = scales.std(dim=0)
+        (
+            rec_loss_no_sam,
+            rec_loss_no_sam_std,
+            rec_loss_sam,
+            rec_loss_sam_std,
+            rec_loss_std,
+            rec_loss_vi,
+            scale,
+            scale_std,
+        ) = self.rec_loss_stats(sample_shape, std, x, x_hat, z_mu)
 
         kl = self.calc_kl_loss(p, q, z_mu)
 
@@ -237,6 +223,42 @@ class VAE(LightningModule):
             }
 
         return loss, logs
+
+    def rec_loss_stats(self, sample_shape, std, x, x_hat, z_mu):
+        if sample_shape == torch.Size():
+            rec_loss_vi, rec_loss_sam, rec_loss_no_sam, scale = self.rec_loss(
+                z_mu, std, x, x_hat
+            )
+        else:
+            rec_losses_tuple = [
+                self.rec_loss(z_mu, std, x, x_hat_i) for x_hat_i in x_hat
+            ]
+            rec_losses_vi = torch.tensor([r[0] for r in rec_losses_tuple])
+            rec_losses_sam = torch.tensor([r[1] for r in rec_losses_tuple])
+            rec_losses_no_sam = torch.tensor([r[2] for r in rec_losses_tuple])
+            scales = torch.tensor([r[3].mean() for r in rec_losses_tuple])
+
+            rec_loss_vi = rec_losses_vi.mean()
+            rec_loss_std = rec_losses_vi.std(dim=0)
+
+            rec_loss_sam = rec_losses_sam.mean()
+            rec_loss_sam_std = rec_losses_sam.std(dim=0)
+
+            rec_loss_no_sam = rec_losses_no_sam.mean()
+            rec_loss_no_sam_std = rec_losses_no_sam.std(dim=0)
+
+            scale = scales.mean()
+            scale_std = scales.std(dim=0)
+        return (
+            rec_loss_no_sam,
+            rec_loss_no_sam_std,
+            rec_loss_sam,
+            rec_loss_sam_std,
+            rec_loss_std,
+            rec_loss_vi,
+            scale,
+            scale_std,
+        )
 
     def calc_kl_loss(
         self,
