@@ -6,7 +6,7 @@ from vae_sam.models.vae import VAE
 
 def test_sam_run_step():
     batch_size = 128
-    vae = VAE(sam_update=True)
+    vae = VAE(sam_update=True, enc_var=1.0)
     x = torch.randn((batch_size, *CIFAR10DataModule.dims))
 
     z, z_mu, std, x_hat, _, _ = vae._run_step(x)
