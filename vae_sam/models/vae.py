@@ -59,6 +59,7 @@ class VAE(LightningModule):
         enc_var: Optional[float] = None,
         rae_update: bool = False,
         rec_loss=F.mse_loss,
+        grad_coeff: float = 1.0,
         **kwargs,
     ):
         """
@@ -186,24 +187,31 @@ class VAE(LightningModule):
         x, y = batch
         z, z_mu, std, x_hat, p, q = self._run_step(x, sample_shape=sample_shape)
 
-        rec_loss_stats = self.rec_loss_stats(sample_shape, std, x, x_hat, z_mu)
+        logs = self.rec_loss_stats(sample_shape, std, x, x_hat, z_mu)
+        kl = self.kl_loss(p, q, z_mu)
 
-        self._decoder_jacobian(x, z_mu)
+        logs = self.loss_stats(kl, logs, x, z_mu)
 
-        kl = self.calc_kl_loss(p, q, z_mu)
+        return logs["loss"], logs
 
+    def loss_stats(self, kl, logs, x, z_mu):
         if self.hparams.sam_update is False:
-            loss = kl + rec_loss_stats["recon_loss"]
-        else:
-            loss = kl + rec_loss_stats["recon_loss_sam"]
+            loss = kl + logs["recon_loss"]
+        elif self.hparams.rae_update is True:
+            grad_loss = self.hparams.grad_coeff * self._decoder_jacobian(x, z_mu).norm(
+                p=2.0
+            )
+            logs = {**logs, "grad_loss": grad_loss}
 
+            loss = kl + grad_loss + logs["recon_loss_no_sam"]
+        else:
+            loss = kl + logs["recon_loss_sam"]
         logs = {
-            **rec_loss_stats,
+            **logs,
             "kl": kl,
             "loss": loss,
         }
-
-        return loss, logs
+        return logs
 
     def rec_loss_stats(
         self, sample_shape, std, x, x_hat, z_mu
@@ -251,7 +259,7 @@ class VAE(LightningModule):
 
         return logs
 
-    def calc_kl_loss(
+    def kl_loss(
         self,
         p: Optional[torch.distributions.Normal],
         q: Optional[torch.distributions.Normal],

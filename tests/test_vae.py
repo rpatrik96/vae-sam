@@ -17,7 +17,7 @@ def test_sam_run_step():
 
 def test_rae_run_step():
     batch_size = 128
-    vae = VAE(rae_update=True, enc_var=1.0)
+    vae = VAE(enc_var=1.0, rae_update=True)
     x = torch.randn((batch_size, *CIFAR10DataModule.dims))
 
     z, z_mu, _, _, _, _ = vae._run_step(x)
@@ -108,7 +108,7 @@ def test_rae_kl():
     xx = vae.encoder(x)
     z_mu = vae.fc_mu(xx)
 
-    kl = vae.calc_kl_loss(None, None, z_mu)
+    kl = vae.kl_loss(None, None, z_mu)
 
     assert kl == vae.hparams.kl_coeff * z_mu.norm(p=2.0) / 2.0
 
