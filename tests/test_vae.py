@@ -3,6 +3,8 @@ from pl_bolts.datamodules import CIFAR10DataModule
 
 from vae_sam.models.vae import VAE
 
+from math import sqrt
+
 
 def test_sam_run_step():
     batch_size = 128
@@ -125,3 +127,12 @@ def test_decoder_jacobian_shape():
     assert vae._decoder_jacobian(x, z_mu).shape == torch.Size(
         [batch_size, vae.hparams.latent_dim]
     )
+
+
+def test_grad_coeff_tying():
+    latent_dim = 16
+    vae = VAE(
+        rae_update=True, tie_grad_coeff_sam=True, enc_var=1.0, latent_dim=latent_dim
+    )
+
+    assert vae.hparams.grad_coeff == sqrt(vae.hparams.enc_var * vae.hparams.latent_dim)

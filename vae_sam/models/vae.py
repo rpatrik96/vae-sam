@@ -60,8 +60,10 @@ class VAE(LightningModule):
         rae_update: bool = False,
         rec_loss=F.mse_loss,
         grad_coeff: float = 1.0,
+        tie_grad_coeff_sam: bool = False,
         **kwargs,
     ):
+
         """
         Args:
             input_height: height of the images
@@ -80,12 +82,22 @@ class VAE(LightningModule):
 
         self._param_sanity_checks(enc_var, rae_update)
 
-        self.save_hyperparameters()
-
-        if not isinstance(self.hparams.val_num_samples, torch.Size):
-            self.hparams.val_num_samples = torch.Size([self.hparams.val_num_samples])
+        self._setup_hparams()
 
         self._setup_networks(enc_type, first_conv, maxpool1)
+
+    def _setup_hparams(self):
+        self.save_hyperparameters()
+        if not isinstance(self.hparams.val_num_samples, torch.Size):
+            self.hparams.val_num_samples = torch.Size([self.hparams.val_num_samples])
+        if self.hparams.rae_update is True and self.hparams.tie_grad_coeff_sam is True:
+            if self.hparams.enc_var is None:
+                raise ValueError(
+                    f"For {self.hparams.tie_grad_coeff_sam=} enc_var must be set!"
+                )
+            self.hparams.grad_coeff = math.sqrt(
+                self.hparams.enc_var * self.hparams.latent_dim
+            )
 
     def _param_sanity_checks(self, enc_var, rae_update):
         if enc_var is not None:
