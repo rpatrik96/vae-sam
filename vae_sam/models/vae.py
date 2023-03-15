@@ -84,10 +84,6 @@ class VAE(LightningModule):
                 if self.hparams.enc_var <= 0:
                     raise ValueError(f"{enc_var=}should be positive!")
 
-                self.hparams.enc_var = self.hparams.enc_var * torch.ones(
-                    (self.hparams.latent_dim,), device=self.device
-                )
-
         if not isinstance(self.hparams.val_num_samples, torch.Size):
             self.hparams.val_num_samples = torch.Size([self.hparams.val_num_samples])
 
@@ -146,7 +142,9 @@ class VAE(LightningModule):
         if self.hparams.enc_var is None:
             std = self.fc_var(x).exp().sqrt()
         else:
-            std = self.hparams.enc_var.sqrt()
+            std = self.hparams.enc_var.sqrt() * torch.ones(
+                (self.hparams.latent_dim,), device=x.device
+            )
 
         return std
 
