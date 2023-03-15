@@ -28,13 +28,13 @@ def test_rae_run_step():
 def test_sam_linear_loss():
     batch_size = 128
     TOL = 5e-5
-    vae = VAE(sam_update=True)
     loss = lambda n, m: (n - m).mean()
+    vae = VAE(sam_update=True, rec_loss=loss)
     x = torch.randn((batch_size, *CIFAR10DataModule.dims))
 
     z, z_mu, log_var, x_hat, p, q = vae._run_step(x)
 
-    dLdz, scale = vae.sam_step(x, z_mu, log_var, loss=loss)
+    dLdz, scale = vae.sam_step(x, z_mu, log_var)
 
     x_hat = vae.decoder(z_mu)
     x_hat_sam = vae.decoder(z_mu + scale * dLdz)
@@ -52,9 +52,9 @@ def test_sampling():
     vae = VAE(sam_update=True)
     x = torch.randn((batch_size, *CIFAR10DataModule.dims))
 
-    x = vae.encoder(x)
-    mu = vae.fc_mu(x)
-    std = vae.calc_enc_std(x)
+    xx = vae.encoder(x)
+    mu = vae.fc_mu(xx)
+    std = vae.calc_enc_std(xx)
 
     _, _, z = vae.sample(mu, std, sample_shape)
 
@@ -67,9 +67,9 @@ def test_sampled_rec_loss():
     vae = VAE(sam_update=True)
     x = torch.randn((batch_size, *CIFAR10DataModule.dims))
 
-    x = vae.encoder(x)
-    mu = vae.fc_mu(x)
-    std = vae.calc_enc_std(x)
+    xx = vae.encoder(x)
+    mu = vae.fc_mu(xx)
+    std = vae.calc_enc_std(xx)
 
     _, _, z = vae.sample(mu, std, sample_shape)
 
@@ -105,8 +105,8 @@ def test_rae_kl():
 
     x = torch.randn((batch_size, *CIFAR10DataModule.dims))
 
-    x = vae.encoder(x)
-    z_mu = vae.fc_mu(x)
+    xx = vae.encoder(x)
+    z_mu = vae.fc_mu(xx)
 
     kl = vae.calc_kl_loss(None, None, z_mu)
 

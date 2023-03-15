@@ -55,7 +55,7 @@ class VAE(LightningModule):
         sam_update: bool = False,
         norm_p: float = 2.0,
         offline: bool = True,
-        val_num_samples: torch.Size = torch.Size(),
+        val_num_samples: Union[torch.Size, int] = torch.Size(),
         enc_var: Optional[float] = None,
         rae_update: bool = False,
         rec_loss=F.mse_loss,
@@ -77,13 +77,7 @@ class VAE(LightningModule):
 
         super().__init__()
 
-        if enc_var is not None:
-            if isinstance(enc_var, float):
-                if enc_var <= 0:
-                    raise ValueError(f"{enc_var=}should be positive!")
-
-        if enc_var is None and rae_update is True:
-            raise ValueError(f"enc_var should be fixed when {rae_update=}!")
+        self._param_sanity_checks(enc_var, rae_update)
 
         self.save_hyperparameters()
 
@@ -91,6 +85,14 @@ class VAE(LightningModule):
             self.hparams.val_num_samples = torch.Size([self.hparams.val_num_samples])
 
         self._setup_networks(enc_type, first_conv, maxpool1)
+
+    def _param_sanity_checks(self, enc_var, rae_update):
+        if enc_var is not None:
+            if isinstance(enc_var, float):
+                if enc_var <= 0:
+                    raise ValueError(f"{enc_var=}should be positive!")
+        if enc_var is None and rae_update is True:
+            raise ValueError(f"enc_var should be fixed when {rae_update=}!")
 
     def _setup_networks(self, enc_type, first_conv, maxpool1):
         valid_encoders = {
