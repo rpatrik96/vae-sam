@@ -142,7 +142,7 @@ class VAE(LightningModule):
         if self.hparams.enc_var is None:
             std = self.fc_var(x).exp().sqrt()
         else:
-            std = self.hparams.enc_var.sqrt() * torch.ones(
+            std = math.sqrt(self.hparams.enc_var) * torch.ones(
                 (self.hparams.latent_dim,), device=x.device
             )
 
