@@ -110,7 +110,7 @@ def test_rae_kl():
 
     kl = vae.calc_kl_loss(None, None, z_mu)
 
-    assert kl == vae.kl_coeff * z_mu.norm(p=2.0) / 2.0
+    assert kl == vae.hparams.kl_coeff * z_mu.norm(p=2.0) / 2.0
 
 
 def test_decoder_jacobian_shape():
