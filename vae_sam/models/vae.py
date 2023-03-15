@@ -196,6 +196,8 @@ class VAE(LightningModule):
             scale_std,
         ) = self.rec_loss_stats(sample_shape, std, x, x_hat, z_mu)
 
+        self._decoder_jacobian(x, z_mu)
+
         kl = self.calc_kl_loss(p, q, z_mu)
 
         if self.hparams.sam_update is False:
@@ -310,10 +312,10 @@ class VAE(LightningModule):
 
         return rec_loss_vi, rec_loss_sam, rec_loss_no_sam, scale.detach().mean()
 
-    def sam_step(self, x, z_mu, std, loss=F.mse_loss):
-        dLdz = torch.autograd.grad(outputs=loss(self.decoder(z_mu), x), inputs=z_mu)[
-            0
-        ].detach()
+    def sam_step(
+        self, x: torch.Tensor, z_mu: torch.Tensor, std: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        dLdz = self._decoder_jacobian(x, z_mu).detach()
 
         dLdz = std.mean(dim=0, keepdim=True).detach() * dLdz
         scale = math.sqrt(self.hparams.latent_dim) / dLdz.norm(
@@ -321,6 +323,11 @@ class VAE(LightningModule):
         )
 
         return dLdz, scale
+
+    def _decoder_jacobian(self, x: torch.Tensor, z_mu: torch.Tensor) -> torch.Tensor:
+        return torch.autograd.grad(
+            outputs=self.hparams.rec_loss(self.decoder(z_mu), x), inputs=z_mu
+        )[0]
 
     def training_step(self, batch, batch_idx):
         loss, logs = self.step(batch, batch_idx)
