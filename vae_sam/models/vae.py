@@ -3,7 +3,7 @@ import subprocess
 import urllib.parse
 from argparse import ArgumentParser
 from os.path import dirname
-from typing import Optional
+from typing import Optional, Union
 
 import pytorch_lightning as pl
 import torch
@@ -186,47 +186,28 @@ class VAE(LightningModule):
         x, y = batch
         z, z_mu, std, x_hat, p, q = self._run_step(x, sample_shape=sample_shape)
 
-        (
-            rec_loss_no_sam,
-            rec_loss_no_sam_std,
-            rec_loss_sam,
-            rec_loss_sam_std,
-            rec_loss_std,
-            rec_loss_vi,
-            scale,
-            scale_std,
-        ) = self.rec_loss_stats(sample_shape, std, x, x_hat, z_mu)
+        rec_loss_stats = self.rec_loss_stats(sample_shape, std, x, x_hat, z_mu)
 
         self._decoder_jacobian(x, z_mu)
 
         kl = self.calc_kl_loss(p, q, z_mu)
 
         if self.hparams.sam_update is False:
-            loss = kl + rec_loss_vi
+            loss = kl + rec_loss_stats["recon_loss"]
         else:
-            loss = kl + rec_loss_sam
+            loss = kl + rec_loss_stats["recon_loss_sam"]
 
         logs = {
-            "recon_loss": rec_loss_vi,
-            "recon_loss_sam": rec_loss_sam,
-            "recon_loss_no_sam": rec_loss_no_sam,
+            **rec_loss_stats,
             "kl": kl,
             "loss": loss,
-            "scale": scale,
         }
-
-        if sample_shape != torch.Size():
-            logs = {
-                **logs,
-                "recon_loss_std": rec_loss_std,
-                "recon_loss_sam_std": rec_loss_sam_std,
-                "recon_loss_no_sam_std": rec_loss_no_sam_std,
-                "scale_std": scale_std,
-            }
 
         return loss, logs
 
-    def rec_loss_stats(self, sample_shape, std, x, x_hat, z_mu):
+    def rec_loss_stats(
+        self, sample_shape, std, x, x_hat, z_mu
+    ) -> dict[str : torch.Tensor]:
         if sample_shape == torch.Size():
             rec_loss_vi, rec_loss_sam, rec_loss_no_sam, scale = self.rec_loss(
                 z_mu, std, x, x_hat
@@ -251,16 +232,24 @@ class VAE(LightningModule):
 
             scale = scales.mean()
             scale_std = scales.std(dim=0)
-        return (
-            rec_loss_no_sam,
-            rec_loss_no_sam_std,
-            rec_loss_sam,
-            rec_loss_sam_std,
-            rec_loss_std,
-            rec_loss_vi,
-            scale,
-            scale_std,
-        )
+
+        logs = {
+            "recon_loss": rec_loss_vi,
+            "recon_loss_sam": rec_loss_sam,
+            "recon_loss_no_sam": rec_loss_no_sam,
+            "scale": scale,
+        }
+
+        if sample_shape != torch.Size():
+            logs = {
+                **logs,
+                "recon_loss_std": rec_loss_std,
+                "recon_loss_sam_std": rec_loss_sam_std,
+                "recon_loss_no_sam_std": rec_loss_no_sam_std,
+                "scale_std": scale_std,
+            }
+
+        return logs
 
     def calc_kl_loss(
         self,
@@ -272,7 +261,7 @@ class VAE(LightningModule):
             kl = torch.distributions.kl_divergence(q, p).mean()
         else:
             kl = z_mu.norm(p=2.0) / 2.0
-        return self.hparams.self.kl_coeff * kl
+        return self.hparams.kl_coeff * kl
 
     def rec_loss(
         self,
