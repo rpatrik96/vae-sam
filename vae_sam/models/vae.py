@@ -63,7 +63,6 @@ class VAE(LightningModule):
         tie_grad_coeff_sam: bool = False,
         **kwargs,
     ):
-
         """
         Args:
             input_height: height of the images
@@ -335,7 +334,6 @@ class VAE(LightningModule):
         return dLdz, scale
 
     def _decoder_jacobian(self, x: torch.Tensor, z: torch.Tensor) -> torch.Tensor:
-
         with torch.set_grad_enabled(True):
             grad = torch.autograd.grad(
                 outputs=self.hparams.rec_loss(self.decoder(z), x), inputs=z
