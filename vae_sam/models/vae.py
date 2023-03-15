@@ -324,9 +324,9 @@ class VAE(LightningModule):
 
         return dLdz, scale
 
-    def _decoder_jacobian(self, x: torch.Tensor, z_mu: torch.Tensor) -> torch.Tensor:
+    def _decoder_jacobian(self, x: torch.Tensor, z: torch.Tensor) -> torch.Tensor:
         return torch.autograd.grad(
-            outputs=self.hparams.rec_loss(self.decoder(z_mu), x), inputs=z_mu
+            outputs=self.hparams.rec_loss(self.decoder(z), x), inputs=z
         )[0]
 
     def training_step(self, batch, batch_idx):
