@@ -66,9 +66,9 @@ def test_sampling():
 
     x = vae.encoder(x)
     mu = vae.fc_mu(x)
-    log_var = vae.fc_var(x)
+    std = vae.fc_var(x)
 
-    _, _, z = vae.sample(mu, log_var, sample_shape)
+    _, _, z = vae.sample(mu, std, sample_shape)
 
     assert z.shape[:2] == torch.Size([sample_shape[0], batch_size])
 
@@ -81,11 +81,11 @@ def test_sampled_rec_loss():
 
     xx = vae.encoder(x)
     mu = vae.fc_mu(xx)
-    log_var = vae.fc_var(xx)
+    std = vae.fc_var(xx)
 
-    _, _, z = vae.sample(mu, log_var, sample_shape)
+    _, _, z = vae.sample(mu, std, sample_shape)
 
-    torch.tensor([vae.rec_loss(mu, log_var, x, vae.decoder(zz)) for zz in z])
+    torch.tensor([vae.rec_loss(mu, std, x, vae.decoder(zz)) for zz in z])
 
 
 def test_sampled_rec_loss_step():
@@ -95,3 +95,17 @@ def test_sampled_rec_loss_step():
     y = None
 
     vae.step((x, y), batch_idx=0, sample_shape=vae.hparams.val_num_samples)
+
+
+def test_fix_enc_var():
+    batch_size = 8
+    latent_dim = 16
+    enc_var = 1.0
+    vae = VAE(sam_update=True, enc_var=enc_var)
+
+    x = torch.randn((batch_size, *CIFAR10DataModule.dims))
+
+    xx = vae.encoder(x)
+    std = vae.calc_enc_std(xx)
+
+    assert std.requires_grad == False

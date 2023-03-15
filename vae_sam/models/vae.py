@@ -1,7 +1,9 @@
+import math
 import subprocess
 import urllib.parse
 from argparse import ArgumentParser
 from os.path import dirname
+from typing import Optional
 
 import pytorch_lightning as pl
 import torch
@@ -16,9 +18,6 @@ from pl_bolts.models.autoencoders.components import (
 from pytorch_lightning import LightningModule
 from torch import nn
 from torch.nn import functional as F
-import math
-
-from functorch import vmap
 
 
 class VAE(LightningModule):
@@ -59,6 +58,7 @@ class VAE(LightningModule):
         sam_validation=True,
         val_num_samples=torch.Size(),
         alpha=1.0,
+        enc_var: Optional[float] = None,
         **kwargs,
     ):
         """
@@ -78,6 +78,15 @@ class VAE(LightningModule):
         super().__init__()
 
         self.save_hyperparameters()
+
+        if self.hparams.enc_var is not None:
+            if isinstance(self.hparams.enc_var, float):
+                if self.hparams.enc_var <= 0:
+                    raise ValueError(f"{enc_var=}should be positive!")
+
+                self.hparams.enc_var = self.hparams.enc_var * torch.ones(
+                    (self.hparams.latent_dim,), device=self.device
+                )
 
         if not isinstance(self.hparams.val_num_samples, torch.Size):
             self.hparams.val_num_samples = torch.Size([self.hparams.val_num_samples])
@@ -128,23 +137,37 @@ class VAE(LightningModule):
     def forward(self, x):
         x = self.encoder(x)
         mu = self.fc_mu(x)
-        log_var = self.fc_var(x)
-        p, q, z = self.sample(mu, log_var)
+        std = self.calc_enc_std(x)
+
+        p, q, z = self.sample(mu, std)
         return self.decoder(z)
+
+    def calc_enc_std(self, x: torch.Tensor) -> torch.Tensor:
+        if self.hparams.enc_var is None:
+            std = self.fc_var(x).exp().sqrt()
+        else:
+            std = self.hparams.enc_var.sqrt()
+
+        return std
 
     def _run_step(self, x, sample_shape: torch.Size = torch.Size()):
         x = self.encoder(x)
         mu = self.fc_mu(x)
-        log_var = self.fc_var(x)
-        p, q, z = self.sample(mu, log_var, sample_shape=sample_shape)
+        std = self.calc_enc_std(x)
+        p, q, z = self.sample(mu, std, sample_shape=sample_shape)
         if sample_shape == torch.Size():
             x_hat = self.decoder(z)
         else:
             x_hat = [self.decoder(zz) for zz in z]
-        return z, mu, log_var, x_hat, p, q
+        return z, mu, std, x_hat, p, q
 
-    def sample(self, mu, log_var, sample_shape: torch.Size = torch.Size()):
-        std = torch.exp(log_var / 2)
+    def sample(
+        self,
+        mu: torch.Tensor,
+        std: torch.Tensor,
+        sample_shape: torch.Size = torch.Size(),
+    ):
+
         p = torch.distributions.Normal(torch.zeros_like(mu), torch.ones_like(std))
         q = torch.distributions.Normal(mu, std)
         z = q.rsample(sample_shape=sample_shape)
@@ -152,15 +175,15 @@ class VAE(LightningModule):
 
     def step(self, batch, batch_idx, sample_shape: torch.Size = torch.Size()):
         x, y = batch
-        z, z_mu, log_var, x_hat, p, q = self._run_step(x, sample_shape=sample_shape)
+        z, z_mu, std, x_hat, p, q = self._run_step(x, sample_shape=sample_shape)
 
         if sample_shape == torch.Size():
             rec_loss_vi, rec_loss_sam, rec_loss_no_sam, scale = self.rec_loss(
-                z_mu, log_var, x, x_hat
+                z_mu, std, x, x_hat
             )
         else:
             rec_losses_tuple = [
-                self.rec_loss(z_mu, log_var, x, x_hat_i) for x_hat_i in x_hat
+                self.rec_loss(z_mu, std, x, x_hat_i) for x_hat_i in x_hat
             ]
             rec_losses_vi = torch.tensor([r[0] for r in rec_losses_tuple])
             rec_losses_sam = torch.tensor([r[1] for r in rec_losses_tuple])
@@ -211,7 +234,7 @@ class VAE(LightningModule):
     def rec_loss(
         self,
         z_mu: torch.Tensor,
-        log_var: torch.Tensor,
+        std: torch.Tensor,
         x: torch.Tensor,
         x_hat: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -230,7 +253,7 @@ class VAE(LightningModule):
                 torch.set_grad_enabled(True)
                 z_mu.requires_grad = True
 
-            dLdz, scale = self.sam_step(x, z_mu, log_var)
+            dLdz, scale = self.sam_step(x, z_mu, std)
 
             rec_loss_no_sam = F.mse_loss(
                 self.decoder(z_mu), x, reduction="mean"
@@ -239,13 +262,7 @@ class VAE(LightningModule):
             self.assemble_alpha_sam_grad(dLdz, scale)
 
             rec_loss_sam = F.mse_loss(
-                self.decoder(
-                    z_mu
-                    + scale
-                    * math.sqrt(self.hparams.alpha)
-                    * log_var.exp().sqrt()
-                    * dLdz
-                ),
+                self.decoder(z_mu + scale * math.sqrt(self.hparams.alpha) * std * dLdz),
                 x,
                 reduction="mean",
             )
@@ -267,12 +284,12 @@ class VAE(LightningModule):
         else:
             return dLdz + self.hparams.alpha * (scale * dLdz - dLdz)
 
-    def sam_step(self, x, z_mu, log_var, loss=F.mse_loss):
+    def sam_step(self, x, z_mu, std, loss=F.mse_loss):
         dLdz = torch.autograd.grad(outputs=loss(self.decoder(z_mu), x), inputs=z_mu)[
             0
         ].detach()
 
-        dLdz = log_var.exp().sqrt().mean(dim=0, keepdim=True).detach() * dLdz
+        dLdz = std.mean(dim=0, keepdim=True).detach() * dLdz
         scale = math.sqrt(self.hparams.latent_dim) / dLdz.norm(
             p=self.hparams.norm_p, dim=1, keepdim=True
         )
