@@ -63,7 +63,7 @@ jobs:
 
     - name: black
       run: |
-        black --verbose ./vae_sam/
+        black --check --verbose ./vae_sam/
 
     - name: Tests
       run: |
