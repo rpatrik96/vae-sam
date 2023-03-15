@@ -3,7 +3,7 @@ import subprocess
 import urllib.parse
 from argparse import ArgumentParser
 from os.path import dirname
-from typing import Optional
+from typing import Optional, Union
 
 import pytorch_lightning as pl
 import torch
@@ -51,14 +51,15 @@ class VAE(LightningModule):
         kl_coeff: float = 0.1,
         latent_dim: int = 256,
         lr: float = 1e-4,
-        rho=0.05,
-        sam_update=False,
-        norm_p=2.0,
-        offline=True,
-        sam_validation=True,
-        val_num_samples=torch.Size(),
-        alpha=1.0,
+        rho: float = 0.05,
+        sam_update: bool = False,
+        norm_p: float = 2.0,
+        offline: bool = True,
+        val_num_samples: Union[torch.Size, int] = torch.Size(),
         enc_var: Optional[float] = None,
+        rae_update: bool = False,
+        rec_loss=F.mse_loss,
+        grad_coeff: float = 1.0,
         **kwargs,
     ):
         """
@@ -77,22 +78,24 @@ class VAE(LightningModule):
 
         super().__init__()
 
-        self.save_hyperparameters()
+        self._param_sanity_checks(enc_var, rae_update)
 
-        if self.hparams.enc_var is not None:
-            if isinstance(self.hparams.enc_var, float):
-                if self.hparams.enc_var <= 0:
-                    raise ValueError(f"{enc_var=}should be positive!")
+        self.save_hyperparameters()
 
         if not isinstance(self.hparams.val_num_samples, torch.Size):
             self.hparams.val_num_samples = torch.Size([self.hparams.val_num_samples])
 
-        self.lr = lr
-        self.kl_coeff = kl_coeff
-        self.enc_out_dim = enc_out_dim
-        self.latent_dim = latent_dim
-        self.input_height = input_height
+        self._setup_networks(enc_type, first_conv, maxpool1)
 
+    def _param_sanity_checks(self, enc_var, rae_update):
+        if enc_var is not None:
+            if isinstance(enc_var, float):
+                if enc_var <= 0:
+                    raise ValueError(f"{enc_var=}should be positive!")
+        if enc_var is None and rae_update is True:
+            raise ValueError(f"enc_var should be fixed when {rae_update=}!")
+
+    def _setup_networks(self, enc_type, first_conv, maxpool1):
         valid_encoders = {
             "resnet18": {
                 "enc": resnet18_encoder,
@@ -103,20 +106,18 @@ class VAE(LightningModule):
                 "dec": resnet50_decoder,
             },
         }
-
         if enc_type not in valid_encoders:
             self.encoder = resnet18_encoder(first_conv, maxpool1)
             self.decoder = resnet18_decoder(
-                self.latent_dim, self.input_height, first_conv, maxpool1
+                self.hparams.latent_dim, self.hparams.input_height, first_conv, maxpool1
             )
         else:
             self.encoder = valid_encoders[enc_type]["enc"](first_conv, maxpool1)
             self.decoder = valid_encoders[enc_type]["dec"](
-                self.latent_dim, self.input_height, first_conv, maxpool1
+                self.hparams.latent_dim, self.hparams.input_height, first_conv, maxpool1
             )
-
-        self.fc_mu = nn.Linear(self.enc_out_dim, self.latent_dim)
-        self.fc_var = nn.Linear(self.enc_out_dim, self.latent_dim)
+        self.fc_mu = nn.Linear(self.hparams.enc_out_dim, self.hparams.latent_dim)
+        self.fc_var = nn.Linear(self.hparams.enc_out_dim, self.hparams.latent_dim)
 
     @staticmethod
     def pretrained_weights_available():
@@ -153,6 +154,10 @@ class VAE(LightningModule):
         mu = self.fc_mu(x)
         std = self.calc_enc_std(x)
         p, q, z = self.sample(mu, std, sample_shape=sample_shape)
+
+        if self.hparams.rae_update is True:
+            z = mu
+
         if sample_shape == torch.Size():
             x_hat = self.decoder(z)
         else:
@@ -164,17 +169,53 @@ class VAE(LightningModule):
         mu: torch.Tensor,
         std: torch.Tensor,
         sample_shape: torch.Size = torch.Size(),
-    ):
-
-        p = torch.distributions.Normal(torch.zeros_like(mu), torch.ones_like(std))
-        q = torch.distributions.Normal(mu, std)
-        z = q.rsample(sample_shape=sample_shape)
+    ) -> tuple[
+        Optional[torch.distributions.Normal],
+        Optional[torch.distributions.Normal],
+        torch.tensor,
+    ]:
+        if self.hparams.rae_update is False:
+            p = torch.distributions.Normal(torch.zeros_like(mu), torch.ones_like(std))
+            q = torch.distributions.Normal(mu, std)
+            z = q.rsample(sample_shape=sample_shape)
+        else:
+            p = q = None
+            z = mu
         return p, q, z
 
     def step(self, batch, batch_idx, sample_shape: torch.Size = torch.Size()):
         x, y = batch
         z, z_mu, std, x_hat, p, q = self._run_step(x, sample_shape=sample_shape)
 
+        logs = self.rec_loss_stats(sample_shape, std, x, x_hat, z_mu)
+        kl = self.kl_loss(p, q, z_mu)
+
+        logs = self.loss_stats(kl, logs, x, z_mu)
+
+        return logs["loss"], logs
+
+    def loss_stats(self, kl, logs, x, z_mu):
+        if self.hparams.sam_update is False:
+            loss = kl + logs["recon_loss"]
+        elif self.hparams.rae_update is True:
+            grad_loss = self.hparams.grad_coeff * self._decoder_jacobian(x, z_mu).norm(
+                p=2.0
+            )
+            logs = {**logs, "grad_loss": grad_loss}
+
+            loss = kl + grad_loss + logs["recon_loss_no_sam"]
+        else:
+            loss = kl + logs["recon_loss_sam"]
+        logs = {
+            **logs,
+            "kl": kl,
+            "loss": loss,
+        }
+        return logs
+
+    def rec_loss_stats(
+        self, sample_shape, std, x, x_hat, z_mu
+    ) -> dict[str : torch.Tensor]:
         if sample_shape == torch.Size():
             rec_loss_vi, rec_loss_sam, rec_loss_no_sam, scale = self.rec_loss(
                 z_mu, std, x, x_hat
@@ -200,21 +241,10 @@ class VAE(LightningModule):
             scale = scales.mean()
             scale_std = scales.std(dim=0)
 
-        kl = torch.distributions.kl_divergence(q, p)
-        kl = kl.mean()
-        kl *= self.kl_coeff
-
-        if self.hparams.sam_update is False:
-            loss = kl + rec_loss_vi
-        else:
-            loss = kl + rec_loss_sam
-
         logs = {
             "recon_loss": rec_loss_vi,
             "recon_loss_sam": rec_loss_sam,
             "recon_loss_no_sam": rec_loss_no_sam,
-            "kl": kl,
-            "loss": loss,
             "scale": scale,
         }
 
@@ -227,7 +257,19 @@ class VAE(LightningModule):
                 "scale_std": scale_std,
             }
 
-        return loss, logs
+        return logs
+
+    def kl_loss(
+        self,
+        p: Optional[torch.distributions.Normal],
+        q: Optional[torch.distributions.Normal],
+        z_mu: torch.Tensor,
+    ) -> torch.Tensor:
+        if self.hparams.rae_update is False:
+            kl = torch.distributions.kl_divergence(q, p).mean()
+        else:
+            kl = z_mu.norm(p=2.0) / 2.0
+        return self.hparams.kl_coeff * kl
 
     def rec_loss(
         self,
@@ -242,11 +284,7 @@ class VAE(LightningModule):
             with torch.no_grad():
                 rec_loss_vi = F.mse_loss(x_hat, x, reduction="mean")
 
-        if (
-            self.hparams.sam_update is True
-            and self.hparams.sam_validation is True
-            or self.training is False
-        ):
+        if self.hparams.sam_update is True or self.training is False:
             if self.training is False:
                 torch.set_grad_enabled(True)
                 z_mu.requires_grad = True
@@ -257,10 +295,8 @@ class VAE(LightningModule):
                 self.decoder(z_mu), x, reduction="mean"
             ).detach()
 
-            self.assemble_alpha_sam_grad(dLdz, scale)
-
             rec_loss_sam = F.mse_loss(
-                self.decoder(z_mu + scale * math.sqrt(self.hparams.alpha) * std * dLdz),
+                self.decoder(z_mu + scale * std * dLdz),
                 x,
                 reduction="mean",
             )
@@ -274,18 +310,10 @@ class VAE(LightningModule):
 
         return rec_loss_vi, rec_loss_sam, rec_loss_no_sam, scale.detach().mean()
 
-    def assemble_alpha_sam_grad(self, dLdz, scale) -> torch.Tensor:
-        if self.hparams.alpha == 1.0:
-            return scale * dLdz
-        elif self.hparams.alpha == 0.0:
-            return -dLdz
-        else:
-            return dLdz + self.hparams.alpha * (scale * dLdz - dLdz)
-
-    def sam_step(self, x, z_mu, std, loss=F.mse_loss):
-        dLdz = torch.autograd.grad(outputs=loss(self.decoder(z_mu), x), inputs=z_mu)[
-            0
-        ].detach()
+    def sam_step(
+        self, x: torch.Tensor, z_mu: torch.Tensor, std: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        dLdz = self._decoder_jacobian(x, z_mu).detach()
 
         dLdz = std.mean(dim=0, keepdim=True).detach() * dLdz
         scale = math.sqrt(self.hparams.latent_dim) / dLdz.norm(
@@ -293,6 +321,15 @@ class VAE(LightningModule):
         )
 
         return dLdz, scale
+
+    def _decoder_jacobian(self, x: torch.Tensor, z: torch.Tensor) -> torch.Tensor:
+
+        with torch.set_grad_enabled(True):
+            grad = torch.autograd.grad(
+                outputs=self.hparams.rec_loss(self.decoder(z), x), inputs=z
+            )[0]
+
+        return grad
 
     def training_step(self, batch, batch_idx):
         loss, logs = self.step(batch, batch_idx)
@@ -310,7 +347,7 @@ class VAE(LightningModule):
         return loss
 
     def configure_optimizers(self):
-        return torch.optim.SGD(self.parameters(), lr=self.lr)
+        return torch.optim.SGD(self.parameters(), lr=self.hparams.lr)
 
     @staticmethod
     def add_model_specific_args(parent_parser):

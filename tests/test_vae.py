@@ -4,27 +4,37 @@ from pl_bolts.datamodules import CIFAR10DataModule
 from vae_sam.models.vae import VAE
 
 
-def test_sam_update():
+def test_sam_run_step():
     batch_size = 128
     vae = VAE(sam_update=True)
     x = torch.randn((batch_size, *CIFAR10DataModule.dims))
 
-    z, z_mu, log_var, x_hat, p, q = vae._run_step(x)
-    rec_loss, rec_loss_sam, rec_loss_no_sam, _ = vae.rec_loss(z_mu, log_var, x, x_hat)
+    z, z_mu, std, x_hat, _, _ = vae._run_step(x)
+    rec_loss, rec_loss_sam, rec_loss_no_sam, _ = vae.rec_loss(z_mu, std, x, x_hat)
 
     assert rec_loss_no_sam < rec_loss_sam
+
+
+def test_rae_run_step():
+    batch_size = 128
+    vae = VAE(enc_var=1.0, rae_update=True)
+    x = torch.randn((batch_size, *CIFAR10DataModule.dims))
+
+    z, z_mu, _, _, _, _ = vae._run_step(x)
+
+    assert torch.allclose(z, z_mu)
 
 
 def test_sam_linear_loss():
     batch_size = 128
     TOL = 5e-5
-    vae = VAE(sam_update=True)
     loss = lambda n, m: (n - m).mean()
+    vae = VAE(sam_update=True, rec_loss=loss)
     x = torch.randn((batch_size, *CIFAR10DataModule.dims))
 
     z, z_mu, log_var, x_hat, p, q = vae._run_step(x)
 
-    dLdz, scale = vae.sam_step(x, z_mu, log_var, loss=loss)
+    dLdz, scale = vae.sam_step(x, z_mu, log_var)
 
     x_hat = vae.decoder(z_mu)
     x_hat_sam = vae.decoder(z_mu + scale * dLdz)
@@ -36,37 +46,15 @@ def test_sam_linear_loss():
     assert (dLdz.abs() - dLdz_sam.abs()).mean().abs() < TOL
 
 
-def test_alpha_sam():
-    batch_size = 128
-    TOL = 2e-7
-    vae = VAE(sam_update=True)
-
-    x = torch.randn((batch_size, *CIFAR10DataModule.dims))
-
-    z, z_mu, log_var, x_hat, p, q = vae._run_step(x)
-
-    dLdz, scale = vae.sam_step(x, z_mu, log_var)
-
-    # SGD
-    vae.hparams.alpha = 0.0
-    grad = vae.assemble_alpha_sam_grad(dLdz, scale)
-    assert (grad.abs() - (-dLdz).abs()).mean().abs() < TOL
-
-    # SAM
-    vae.hparams.alpha = 1.0
-    grad = vae.assemble_alpha_sam_grad(dLdz, scale)
-    assert (grad.abs() - (scale * dLdz).abs()).mean().abs() < TOL
-
-
 def test_sampling():
     batch_size = 8
     sample_shape = torch.Size([4])
     vae = VAE(sam_update=True)
     x = torch.randn((batch_size, *CIFAR10DataModule.dims))
 
-    x = vae.encoder(x)
-    mu = vae.fc_mu(x)
-    std = vae.calc_enc_std(x)
+    xx = vae.encoder(x)
+    mu = vae.fc_mu(xx)
+    std = vae.calc_enc_std(xx)
 
     _, _, z = vae.sample(mu, std, sample_shape)
 
@@ -99,13 +87,41 @@ def test_sampled_rec_loss_step():
 
 def test_fix_enc_var():
     batch_size = 8
-    latent_dim = 16
     enc_var = 1.0
     vae = VAE(sam_update=True, enc_var=enc_var)
 
     x = torch.randn((batch_size, *CIFAR10DataModule.dims))
 
-    xx = vae.encoder(x)
-    std = vae.calc_enc_std(xx)
+    x = vae.encoder(x)
+    std = vae.calc_enc_std(x)
 
     assert std.requires_grad == False
+
+
+def test_rae_kl():
+    batch_size = 8
+    enc_var = 1.0
+    vae = VAE(sam_update=True, enc_var=enc_var, rae_update=True)
+
+    x = torch.randn((batch_size, *CIFAR10DataModule.dims))
+
+    xx = vae.encoder(x)
+    z_mu = vae.fc_mu(xx)
+
+    kl = vae.kl_loss(None, None, z_mu)
+
+    assert kl == vae.hparams.kl_coeff * z_mu.norm(p=2.0) / 2.0
+
+
+def test_decoder_jacobian_shape():
+    batch_size = 8
+    vae = VAE(sam_update=False)
+
+    x = torch.randn((batch_size, *CIFAR10DataModule.dims))
+
+    xx = vae.encoder(x)
+    z_mu = vae.fc_mu(xx)
+
+    assert vae._decoder_jacobian(x, z_mu).shape == torch.Size(
+        [batch_size, vae.hparams.latent_dim]
+    )
