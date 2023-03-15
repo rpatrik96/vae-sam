@@ -8,7 +8,7 @@ from math import sqrt
 
 def test_sam_run_step():
     batch_size = 128
-    vae = VAE(sam_update=True, enc_var=1.0)
+    vae = VAE(sam_update=True, enc_var=0.001)
     x = torch.randn((batch_size, *CIFAR10DataModule.dims))
 
     z, z_mu, std, x_hat, _, _ = vae._run_step(x)
