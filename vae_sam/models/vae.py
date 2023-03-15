@@ -296,8 +296,6 @@ class VAE(LightningModule):
                 self.decoder(z_mu), x, reduction="mean"
             ).detach()
 
-            self.assemble_alpha_sam_grad(dLdz, scale)
-
             rec_loss_sam = F.mse_loss(
                 self.decoder(z_mu + scale * math.sqrt(self.hparams.alpha) * std * dLdz),
                 x,
