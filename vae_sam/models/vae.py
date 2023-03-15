@@ -90,12 +90,6 @@ class VAE(LightningModule):
         if not isinstance(self.hparams.val_num_samples, torch.Size):
             self.hparams.val_num_samples = torch.Size([self.hparams.val_num_samples])
 
-        self.lr = lr
-        self.kl_coeff = kl_coeff
-        self.enc_out_dim = enc_out_dim
-        self.latent_dim = latent_dim
-        self.input_height = input_height
-
         self._setup_networks(enc_type, first_conv, maxpool1)
 
     def _setup_networks(self, enc_type, first_conv, maxpool1):
@@ -112,15 +106,15 @@ class VAE(LightningModule):
         if enc_type not in valid_encoders:
             self.encoder = resnet18_encoder(first_conv, maxpool1)
             self.decoder = resnet18_decoder(
-                self.latent_dim, self.input_height, first_conv, maxpool1
+                self.hparams.latent_dim, self.hparams.input_height, first_conv, maxpool1
             )
         else:
             self.encoder = valid_encoders[enc_type]["enc"](first_conv, maxpool1)
             self.decoder = valid_encoders[enc_type]["dec"](
-                self.latent_dim, self.input_height, first_conv, maxpool1
+                self.hparams.latent_dim, self.hparams.input_height, first_conv, maxpool1
             )
-        self.fc_mu = nn.Linear(self.enc_out_dim, self.latent_dim)
-        self.fc_var = nn.Linear(self.enc_out_dim, self.latent_dim)
+        self.fc_mu = nn.Linear(self.hparams.enc_out_dim, self.hparams.latent_dim)
+        self.fc_var = nn.Linear(self.hparams.enc_out_dim, self.hparams.latent_dim)
 
     @staticmethod
     def pretrained_weights_available():
@@ -276,7 +270,7 @@ class VAE(LightningModule):
             kl = torch.distributions.kl_divergence(q, p).mean()
         else:
             kl = z_mu.norm(p=2.0) / 2.0
-        return self.kl_coeff * kl
+        return self.hparams.self.kl_coeff * kl
 
     def rec_loss(
         self,
@@ -350,7 +344,7 @@ class VAE(LightningModule):
         return loss
 
     def configure_optimizers(self):
-        return torch.optim.SGD(self.parameters(), lr=self.lr)
+        return torch.optim.SGD(self.parameters(), lr=self.hparams.lr)
 
     @staticmethod
     def add_model_specific_args(parent_parser):
