@@ -6,7 +6,7 @@ jsonargparse[signatures]
 hydra-core
 pre-commit
 omegaconf~=2.2.3
-tueplots
+tueplots~=0.0.7
 numpy~=1.23.4
 matplotlib~=3.6.1
 PyYAML~=6.0
