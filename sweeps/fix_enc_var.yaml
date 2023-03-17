@@ -14,7 +14,7 @@ metric:
   name: val_loss
 parameters:
   trainer.max_epochs:
-    value: 500
+    value: 400
   trainer.gpus:
     value: 1
   data.batch_size:
