@@ -28,6 +28,6 @@ parameters:
   model.enc_var:
     values: [1, 1e-2, 1e-4, 1e-6]
   model.offline:
-    value: false
+    value: true
   seed_everything:
     values: [42, 64, 982, 5748, 23567]

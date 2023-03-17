@@ -22,6 +22,6 @@ parameters:
   model.sam_update:
     values: [false,true]
   model.offline:
-    value: false
+    value: true
   seed_everything:
     values: [42, 64, 982, 5748, 23567, 89, 1996, 654, 35684, 87645]
