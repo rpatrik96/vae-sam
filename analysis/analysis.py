@@ -56,12 +56,14 @@ def sweep2df(
     if load is True and isfile(csv_name) is True and isfile(npy_name) is True:
         print(f"\t Loading {filename}...")
         npy_data = np.load(npy_name)
-        val_loss_history = npy_data["val_loss_history"]
-        val_scale_inv_history = npy_data["val_scale_inv_history"]
+        val_loss_histories = npy_data["val_loss_histories"]
+        val_scale_inv_histories = npy_data["val_scale_inv_histories"]
 
-        return pd.read_csv(csv_name), (val_loss_history, val_scale_inv_history)
+        return pd.read_csv(csv_name), val_loss_histories, val_scale_inv_histories
 
     data = []
+    val_scale_inv_histories = []
+    val_loss_histories = []
     for run in sweep_runs:
         # .summary contains the output keys/values for metrics like accuracy.
         #  We call ._json_dict to omit large files
@@ -108,7 +110,7 @@ def sweep2df(
                     val_loss_history.idxmin()[1],
                     val_loss_history.min()[1],
                 )
-                val_loss_history = val_loss_history["val_loss"]
+                val_loss_histories.append(val_loss_history["val_loss"])
 
                 val_scale_history = run.history(keys=[f"val_scale"])
                 max_val_scale_step, max_val_scale = (
@@ -116,7 +118,7 @@ def sweep2df(
                     val_scale_history.max()[1],
                 )
 
-                val_scale_inv_history = 1.0 / val_scale_history["val_scale"]
+                val_scale_inv_histories.append(1.0 / val_scale_history["val_scale"])
 
                 min_val_scale_inv = 1.0 / max_val_scale
 
@@ -168,12 +170,18 @@ def sweep2df(
         ],
     ).fillna(0)
 
+    # Prune histories to the minimum length
+    min_len = np.array([len(v) for v in val_loss_histories]).min()
+
+    val_loss_histories = np.array([v[:min_len] for v in val_loss_histories])
+    val_scale_inv_histories = np.array([v[:min_len] for v in val_scale_inv_histories])
+
     if save is True:
         runs_df.to_csv(csv_name)
         np.savez_compressed(
             npy_name,
-            val_loss_history=val_loss_history,
-            val_scale_inv_history=val_scale_inv_history,
+            val_loss_history=val_loss_histories,
+            val_scale_inv_history=val_scale_inv_histories,
         )
 
-    return runs_df, val_loss_history, val_scale_inv_history
+    return runs_df, val_loss_histories, val_scale_inv_histories
