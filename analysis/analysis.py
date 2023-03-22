@@ -1,5 +1,5 @@
 from os.path import isfile
-
+import numpy as np
 import pandas as pd
 
 BLUE = "#1A85FF"
@@ -53,6 +53,14 @@ def sweep2df(
         print(f"\t Loading {filename}...")
         return pd.read_csv(csv_name)
 
+    if load is True and isfile(csv_name) is True and isfile(npy_name) is True:
+        print(f"\t Loading {filename}...")
+        npy_data = np.load(npy_name)
+        val_loss_history = npy_data["val_loss_history"]
+        val_scale_inv_history = npy_data["val_scale_inv_history"]
+
+        return pd.read_csv(csv_name), (val_loss_history, val_scale_inv_history)
+
     data = []
     for run in sweep_runs:
         # .summary contains the output keys/values for metrics like accuracy.
@@ -62,18 +70,30 @@ def sweep2df(
         if run.state == "finished":
             try:
                 # if True:
+                # print(run.name)
                 # .config contains the hyperparameters.
                 #  We remove special values that start with _.
                 config = {k: v for k, v in run.config.items() if not k.startswith("_")}
 
-                sam_update = config["sam_update"]
+                sam_update = config["model.sam_update"]
+
                 try:
                     rae_update = config["rae_update"]
+
+                except:
+                    rae_update = False
+
+                try:
                     tie_grad_coeff_sam = config["tie_grad_coeff_sam"]
                 except:
-                    rae_update = tie_grad_coeff_sam = False
+                    tie_grad_coeff_sam = False
+
+                try:
+                    enc_var = config["model.enc_var"]
+                except:
+                    enc_var = 0
+
                 seed_everything = config["seed_everything"]
-                enc_var = config["enc_var"]
 
                 val_scale_inv = 1.0 / summary["val_scale"]
 
@@ -82,6 +102,27 @@ def sweep2df(
                 val_recon_loss_no_sam = summary["val_recon_loss_no_sam"]
                 val_recon_loss = summary["val_recon_loss"]
                 val_recon_loss_sam = summary["val_recon_loss_sam"]
+
+                val_loss_history = run.history(keys=[f"val_loss"])
+                min_val_loss_step, min_val_loss = (
+                    val_loss_history.idxmin()[1],
+                    val_loss_history.min()[1],
+                )
+                val_loss_history = val_loss_history["val_loss"]
+
+                val_scale_history = run.history(keys=[f"val_scale"])
+                max_val_scale_step, max_val_scale = (
+                    val_scale_history.idxmax()[1],
+                    val_scale_history.max()[1],
+                )
+
+                val_scale_inv_history = 1.0 / val_scale_history["val_scale"]
+
+                min_val_scale_inv = 1.0 / max_val_scale
+
+                val_scale_inv4min_val_loss = (
+                    1.0 / val_scale_history.iloc[int(min_val_loss_step)]["val_scale"]
+                )
 
                 data.append(
                     [
@@ -92,13 +133,17 @@ def sweep2df(
                         seed_everything,
                         enc_var,
                         val_scale_inv,
+                        min_val_scale_inv,
+                        val_scale_inv4min_val_loss,
                         val_loss,
+                        min_val_loss,
                         val_kl,
                         val_recon_loss,
                         val_recon_loss_sam,
                         val_recon_loss_no_sam,
                     ]
                 )
+
             except:
                 print(f"Encountered a faulty run with ID {run.name}")
 
@@ -112,7 +157,10 @@ def sweep2df(
             "seed_everything",
             "enc_var",
             "val_scale_inv",
+            "min_val_scale_inv",
+            "val_scale_inv4min_val_loss",
             "val_loss",
+            "min_val_loss",
             "val_kl",
             "val_recon_loss",
             "val_recon_loss_sam",
@@ -122,5 +170,10 @@ def sweep2df(
 
     if save is True:
         runs_df.to_csv(csv_name)
+        np.savez_compressed(
+            npy_name,
+            val_loss_history=val_loss_history,
+            val_scale_inv_history=val_scale_inv_history,
+        )
 
-    return runs_df
+    return runs_df, val_loss_history, val_scale_inv_history
