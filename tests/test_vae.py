@@ -4,6 +4,7 @@ from pl_bolts.datamodules import CIFAR10DataModule
 from vae_sam.models.vae import VAE
 
 from math import sqrt
+import pytest
 
 
 def test_sam_run_step():
@@ -113,6 +114,35 @@ def test_rae_kl():
     kl = vae.kl_loss(None, None, z_mu)
 
     assert kl == vae.hparams.kl_coeff * z_mu.norm(p=2.0) / 2.0
+
+
+@pytest.mark.parametrize(
+    "sam_update, rae_update", [(True, False), (False, True), (False, False)]
+)
+def test_loss_stats(sam_update, rae_update):
+    batch_size = 8
+    enc_var = 1.0
+    sample_shape = torch.Size()
+    vae = VAE(sam_update=sam_update, enc_var=enc_var, rae_update=rae_update)
+
+    x = torch.randn((batch_size, *CIFAR10DataModule.dims))
+
+    z, z_mu, std, x_hat, p, q = vae._run_step(x, sample_shape=sample_shape)
+
+    logs = vae.rec_loss_stats(
+        std=std, x=x, x_hat=x_hat, z_mu=z_mu, sample_shape=sample_shape
+    )
+    kl = vae.kl_loss(p, q, z_mu)
+    logs = vae.loss_stats(kl, logs, x, z_mu)
+
+    loss = logs["loss"]
+
+    if sam_update is True and rae_update is False:
+        assert loss == (kl + logs["recon_loss_sam"])
+    elif sam_update is False and rae_update is True:
+        assert loss == (kl + logs["grad_loss"] + logs["recon_loss_no_sam"])
+    if sam_update is False and rae_update is False:
+        assert loss == (kl + logs["recon_loss"])
 
 
 def test_decoder_jacobian_shape():

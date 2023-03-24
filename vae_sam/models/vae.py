@@ -206,17 +206,20 @@ class VAE(LightningModule):
         return logs["loss"], logs
 
     def loss_stats(self, kl, logs, x, z_mu):
-        if self.hparams.sam_update is False:
+        if self.hparams.sam_update is False and self.hparams.rae_update is False:
             loss = kl + logs["recon_loss"]
-        elif self.hparams.rae_update is True:
+        elif self.hparams.sam_update is False and self.hparams.rae_update is True:
             grad_loss = self.hparams.grad_coeff * self._decoder_jacobian(x, z_mu).norm(
                 p=2.0
             )
             logs = {**logs, "grad_loss": grad_loss}
 
             loss = kl + grad_loss + logs["recon_loss_no_sam"]
-        else:
+        elif self.hparams.sam_update is True and self.hparams.rae_update is False:
             loss = kl + logs["recon_loss_sam"]
+        else:
+            raise ValueError(f"sam_update and rae_update cannot be simultaneously True")
+
         logs = {
             **logs,
             "kl": kl,
