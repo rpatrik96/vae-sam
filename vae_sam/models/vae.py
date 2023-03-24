@@ -300,10 +300,6 @@ class VAE(LightningModule):
 
         # SAM
         if self.hparams.sam_update is True:
-            if self.training is False:
-                torch.set_grad_enabled(True)
-                z_mu.requires_grad = True
-
             dLdz, scale = self.sam_step(x, z_mu, std)
 
             rec_loss_sam = F.mse_loss(
@@ -311,10 +307,6 @@ class VAE(LightningModule):
                 x,
                 reduction="mean",
             )
-
-            if self.training is False:
-                torch.set_grad_enabled(False)
-                rec_loss_sam = rec_loss_sam.detach()
         else:
             rec_loss_sam = scale = torch.FloatTensor([-1.0])
 
@@ -333,11 +325,15 @@ class VAE(LightningModule):
         return dLdz, scale
 
     def _decoder_jacobian(self, x: torch.Tensor, z: torch.Tensor) -> torch.Tensor:
+        if self.training is False:
+            z.requires_grad = True
         with torch.set_grad_enabled(True):
             grad = torch.autograd.grad(
                 outputs=self.hparams.rec_loss(self.decoder(z), x), inputs=z
             )[0]
 
+        if self.training is False:
+            z.requires_grad = False
         return grad
 
     def training_step(self, batch, batch_idx):
