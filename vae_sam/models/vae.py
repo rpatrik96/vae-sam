@@ -292,22 +292,19 @@ class VAE(LightningModule):
         x: torch.Tensor,
         x_hat: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        if self.hparams.sam_update is False:
-            rec_loss_vi = F.mse_loss(x_hat, x, reduction="mean")
-        else:
-            with torch.no_grad():
-                rec_loss_vi = F.mse_loss(x_hat, x, reduction="mean")
+        # VAE
+        rec_loss_vi = F.mse_loss(x_hat, x, reduction="mean")
 
-        if self.hparams.sam_update is True or self.training is False:
+        # RAE
+        rec_loss_no_sam = F.mse_loss(self.decoder(z_mu), x, reduction="mean")
+
+        # SAM
+        if self.hparams.sam_update is True:
             if self.training is False:
                 torch.set_grad_enabled(True)
                 z_mu.requires_grad = True
 
             dLdz, scale = self.sam_step(x, z_mu, std)
-
-            rec_loss_no_sam = F.mse_loss(
-                self.decoder(z_mu), x, reduction="mean"
-            ).detach()
 
             rec_loss_sam = F.mse_loss(
                 self.decoder(z_mu + scale * std * dLdz),
@@ -318,9 +315,8 @@ class VAE(LightningModule):
             if self.training is False:
                 torch.set_grad_enabled(False)
                 rec_loss_sam = rec_loss_sam.detach()
-
         else:
-            rec_loss_sam = rec_loss_no_sam = scale = torch.FloatTensor([-1.0])
+            rec_loss_sam = scale = torch.FloatTensor([-1.0])
 
         return rec_loss_vi, rec_loss_sam, rec_loss_no_sam, scale.detach().mean()
 
