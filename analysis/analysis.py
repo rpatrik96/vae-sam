@@ -69,9 +69,11 @@ def sweep2df(
         #  We call ._json_dict to omit large files
         summary = run.summary._json_dict
 
-        if run.state == "finished":
-            try:
-                # if True:
+        if run.state == "finished" or (
+            "epoch" in summary.keys() and summary["epoch"] > 50
+        ):
+            # try:
+            if True:
                 # print(run.name)
                 # .config contains the hyperparameters.
                 #  We remove special values that start with _.
@@ -112,18 +114,26 @@ def sweep2df(
                 )
                 val_loss_histories.append(val_loss_history["val_loss"])
 
-                val_scale_history = run.history(keys=[f"val_scale"])
+                val_scale_key = "val_scale"
+                val_scale_history = run.history(keys=[val_scale_key])
+                if val_scale_inv == -1.0 and rae_update is True:
+                    val_scale_key = "val_grad_loss"
+                    val_scale_inv = (
+                        summary[val_scale_key] / config["latent_dim"] / enc_var
+                    )
+                    val_scale_history = run.history(keys=[val_scale_key])
+
                 max_val_scale_step, max_val_scale = (
                     val_scale_history.idxmax()[1],
                     val_scale_history.max()[1],
                 )
 
-                val_scale_inv_histories.append(1.0 / val_scale_history["val_scale"])
+                val_scale_inv_histories.append(1.0 / val_scale_history[val_scale_key])
 
                 min_val_scale_inv = 1.0 / max_val_scale
 
                 val_scale_inv4min_val_loss = (
-                    1.0 / val_scale_history.iloc[int(min_val_loss_step)]["val_scale"]
+                    1.0 / val_scale_history.iloc[int(min_val_loss_step)][val_scale_key]
                 )
 
                 data.append(
@@ -146,8 +156,8 @@ def sweep2df(
                     ]
                 )
 
-            except:
-                print(f"Encountered a faulty run with ID {run.name}")
+            # except:
+            #     print(f"Encountered a faulty run with ID {run.name}")
 
     runs_df = pd.DataFrame(
         data,
