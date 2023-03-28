@@ -77,6 +77,8 @@ def sweep2df(
 
                 sam_update = config["model.sam_update"]
 
+                latent_dim = config["latent_dim"]
+
                 try:
                     rae_update = config["rae_update"]
 
@@ -90,8 +92,9 @@ def sweep2df(
 
                 try:
                     enc_var = config["model.enc_var"]
+                    enc_std = np.sqrt(enc_var)
                 except:
-                    enc_var = 0
+                    enc_var = enc_std = 0
 
                 seed_everything = config["seed_everything"]
 
@@ -112,25 +115,37 @@ def sweep2df(
 
                 val_scale_key = "val_scale"
                 val_scale_history = run.history(keys=[val_scale_key])
-                if val_scale_inv == -1.0 and rae_update is True:
-                    val_scale_key = "val_grad_loss"
-                    val_scale_inv = (
-                        summary[val_scale_key] / config["latent_dim"] / enc_var
-                    )
-                    val_scale_history = run.history(keys=[val_scale_key])
 
                 max_val_scale_step, max_val_scale = (
                     val_scale_history.idxmax()[1],
                     val_scale_history.max()[1],
                 )
 
-                val_scale_inv_histories.append(1.0 / val_scale_history[val_scale_key])
-
                 min_val_scale_inv = 1.0 / max_val_scale
 
                 val_scale_inv4min_val_loss = (
                     1.0 / val_scale_history.iloc[int(min_val_loss_step)][val_scale_key]
                 )
+
+                max_val_scale_step, max_val_scale = (
+                    val_scale_history.idxmax()[1],
+                    val_scale_history.max()[1],
+                )
+
+                if val_scale_inv == -1.0 and rae_update is True:
+                    val_scale_key = "val_grad_loss"
+                    val_scale_inv = summary[val_scale_key]
+                    val_scale_history = run.history(keys=[val_scale_key])
+
+                #
+                if val_scale_key == "val_scale":
+                    val_scale_inv_history = 1.0 / val_scale_history[val_scale_key]
+                    # val_scale_inv_history = np.sqrt(latent_dim)/ enc_std  / val_scale_history[val_scale_key]
+                elif val_scale_key == "val_grad_loss":
+                    val_scale_inv_history = val_scale_history[val_scale_key]
+                    # val_scale_inv_history = val_scale_history[val_scale_key] / np.sqrt(latent_dim)/ enc_std
+
+                val_scale_inv_histories.append(val_scale_inv_history)
 
                 data.append(
                     [
