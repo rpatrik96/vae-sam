@@ -299,7 +299,7 @@ class VAE(LightningModule):
         rec_loss_no_sam = F.mse_loss(self.decoder(z_mu), x, reduction="mean")
 
         # SAM
-        if self.hparams.sam_update is True:
+        if self.hparams.sam_update is True or self.training is False:
             dLdz, scale = self.sam_step(x, z_mu, std)
 
             rec_loss_sam = F.mse_loss(
