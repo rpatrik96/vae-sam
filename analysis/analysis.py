@@ -51,13 +51,9 @@ def sweep2df(
 
     if load is True and isfile(csv_name) is True and isfile(npy_name) is True:
         print(f"\t Loading {filename}...")
-        return pd.read_csv(csv_name)
-
-    if load is True and isfile(csv_name) is True and isfile(npy_name) is True:
-        print(f"\t Loading {filename}...")
         npy_data = np.load(npy_name)
-        val_loss_histories = npy_data["val_loss_histories"]
-        val_scale_inv_histories = npy_data["val_scale_inv_histories"]
+        val_loss_histories = npy_data["val_loss_history"]
+        val_scale_inv_histories = npy_data["val_scale_inv_history"]
 
         return pd.read_csv(csv_name), val_loss_histories, val_scale_inv_histories
 
