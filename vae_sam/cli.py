@@ -23,15 +23,6 @@ class SAMLightningCLI(LightningCLI):
             help="Tags for the run on Weights and Biases",
         )
 
-        parser.add_lightning_class_args(EarlyStopping, "early_stopping")
-        parser.set_defaults(
-            {
-                "early_stopping.monitor": "val_loss",
-                "early_stopping.mode": "min",
-                "early_stopping.patience": 5,
-            }
-        )
-
     def before_instantiate_classes(self) -> None:
         if (
             self.config[self.subcommand].trainer.logger.class_path
