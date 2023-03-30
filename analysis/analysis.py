@@ -55,18 +55,21 @@ def sweep2df(
         val_loss_histories = npy_data["val_loss_history"]
         val_scale_inv_histories = npy_data["val_scale_inv_history"]
         val_grad_loss_histories = npy_data["val_grad_loss_history"]
+        val_recon_loss_no_sam_histories = npy_data["val_recon_loss_no_sam_history"]
 
         return (
             pd.read_csv(csv_name),
             val_loss_histories,
             val_scale_inv_histories,
             val_grad_loss_histories,
+            val_recon_loss_no_sam_histories,
         )
 
     data = []
     val_scale_inv_histories = []
     val_grad_loss_histories = []
     val_loss_histories = []
+    val_recon_loss_no_sam_histories = []
     for run in sweep_runs:
         # .summary contains the output keys/values for metrics like accuracy.
         #  We call ._json_dict to omit large files
@@ -108,7 +111,6 @@ def sweep2df(
 
                 val_loss = summary["val_loss"]
                 val_kl = summary["val_kl"]
-                val_recon_loss_no_sam = summary["val_recon_loss_no_sam"]
                 val_recon_loss = summary["val_recon_loss"]
                 val_recon_loss_sam = summary["val_recon_loss_sam"]
 
@@ -142,6 +144,16 @@ def sweep2df(
                     )
                 except:
                     val_grad_loss = -1.0
+
+                try:
+                    val_recon_loss_no_sam = summary["val_recon_loss_no_sam"]
+                    val_recon_loss_no_sam_histories.append(
+                        run.history(keys=["val_recon_loss_no_sam"])[
+                            "val_recon_loss_no_sam"
+                        ]
+                    )
+                except:
+                    val_recon_loss_no_sam = -1.0
 
                 val_scale_inv_history = 1.0 / val_scale_history[val_scale_key]
 
@@ -201,6 +213,9 @@ def sweep2df(
     val_loss_histories = np.array([v[:min_len] for v in val_loss_histories])
     val_scale_inv_histories = np.array([v[:min_len] for v in val_scale_inv_histories])
     val_grad_loss_histories = np.array([v[:min_len] for v in val_grad_loss_histories])
+    val_recon_loss_no_sam_histories = np.array(
+        [v[:min_len] for v in val_recon_loss_no_sam_histories]
+    )
 
     if save is True:
         runs_df.to_csv(csv_name)
@@ -209,6 +224,13 @@ def sweep2df(
             val_loss_history=val_loss_histories,
             val_scale_inv_history=val_scale_inv_histories,
             val_grad_loss_history=val_grad_loss_histories,
+            val_recon_loss_no_sam_history=val_recon_loss_no_sam_histories,
         )
 
-    return runs_df, val_loss_histories, val_scale_inv_histories, val_grad_loss_histories
+    return (
+        runs_df,
+        val_loss_histories,
+        val_scale_inv_histories,
+        val_grad_loss_histories,
+        val_recon_loss_no_sam_histories,
+    )
