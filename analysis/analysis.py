@@ -99,9 +99,8 @@ def sweep2df(
 
                 try:
                     enc_var = config["model.enc_var"]
-                    enc_std = np.sqrt(enc_var)
                 except:
-                    enc_var = enc_std = 0
+                    enc_var = 0
 
                 seed_everything = config["seed_everything"]
 
@@ -143,14 +142,8 @@ def sweep2df(
                     )
                 except:
                     val_grad_loss = -1.0
-                    # val_grad_loss_history =
 
                 val_scale_inv_history = 1.0 / val_scale_history[val_scale_key]
-                # if val_scale_key == "val_scale":
-                # val_scale_inv_history = np.sqrt(latent_dim)/ enc_std  / val_scale_history[val_scale_key]
-                # elif val_scale_key == "val_grad_loss":
-                #     val_scale_inv_history = val_scale_history[val_scale_key]
-                # val_scale_inv_history = val_scale_history[val_scale_key] / np.sqrt(latent_dim)/ enc_std
 
                 val_scale_inv_histories.append(val_scale_inv_history)
 
@@ -172,6 +165,7 @@ def sweep2df(
                         val_recon_loss_sam,
                         val_recon_loss_no_sam,
                         val_grad_loss,
+                        latent_dim,
                     ]
                 )
 
@@ -197,6 +191,7 @@ def sweep2df(
             "val_recon_loss_sam",
             "val_recon_loss_no_sam",
             "val_grad_loss",
+            "latent_dim",
         ],
     ).fillna(0)
 
