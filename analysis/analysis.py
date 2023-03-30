@@ -54,11 +54,18 @@ def sweep2df(
         npy_data = np.load(npy_name)
         val_loss_histories = npy_data["val_loss_history"]
         val_scale_inv_histories = npy_data["val_scale_inv_history"]
+        val_grad_loss_histories = npy_data["val_grad_loss_history"]
 
-        return pd.read_csv(csv_name), val_loss_histories, val_scale_inv_histories
+        return (
+            pd.read_csv(csv_name),
+            val_loss_histories,
+            val_scale_inv_histories,
+            val_grad_loss_histories,
+        )
 
     data = []
     val_scale_inv_histories = []
+    val_grad_loss_histories = []
     val_loss_histories = []
     for run in sweep_runs:
         # .summary contains the output keys/values for metrics like accuracy.
@@ -127,23 +134,23 @@ def sweep2df(
                     1.0 / val_scale_history.iloc[int(min_val_loss_step)][val_scale_key]
                 )
 
-                max_val_scale_step, max_val_scale = (
-                    val_scale_history.idxmax()[1],
-                    val_scale_history.max()[1],
-                )
-
-                if val_scale_inv == -1.0 and rae_update is True:
-                    val_scale_key = "val_grad_loss"
-                    val_scale_inv = summary[val_scale_key]
-                    val_scale_history = run.history(keys=[val_scale_key])
-
                 #
-                if val_scale_key == "val_scale":
-                    val_scale_inv_history = 1.0 / val_scale_history[val_scale_key]
-                    # val_scale_inv_history = np.sqrt(latent_dim)/ enc_std  / val_scale_history[val_scale_key]
-                elif val_scale_key == "val_grad_loss":
-                    val_scale_inv_history = val_scale_history[val_scale_key]
-                    # val_scale_inv_history = val_scale_history[val_scale_key] / np.sqrt(latent_dim)/ enc_std
+
+                try:
+                    val_grad_loss = summary["val_grad_loss"]
+                    val_grad_loss_histories.append(
+                        run.history(keys=["val_grad_loss"])["val_grad_loss"]
+                    )
+                except:
+                    val_grad_loss = -1.0
+                    # val_grad_loss_history =
+
+                val_scale_inv_history = 1.0 / val_scale_history[val_scale_key]
+                # if val_scale_key == "val_scale":
+                # val_scale_inv_history = np.sqrt(latent_dim)/ enc_std  / val_scale_history[val_scale_key]
+                # elif val_scale_key == "val_grad_loss":
+                #     val_scale_inv_history = val_scale_history[val_scale_key]
+                # val_scale_inv_history = val_scale_history[val_scale_key] / np.sqrt(latent_dim)/ enc_std
 
                 val_scale_inv_histories.append(val_scale_inv_history)
 
@@ -164,6 +171,7 @@ def sweep2df(
                         val_recon_loss,
                         val_recon_loss_sam,
                         val_recon_loss_no_sam,
+                        val_grad_loss,
                     ]
                 )
 
@@ -188,6 +196,7 @@ def sweep2df(
             "val_recon_loss",
             "val_recon_loss_sam",
             "val_recon_loss_no_sam",
+            "val_grad_loss",
         ],
     ).fillna(0)
 
@@ -196,6 +205,7 @@ def sweep2df(
 
     val_loss_histories = np.array([v[:min_len] for v in val_loss_histories])
     val_scale_inv_histories = np.array([v[:min_len] for v in val_scale_inv_histories])
+    val_grad_loss_histories = np.array([v[:min_len] for v in val_grad_loss_histories])
 
     if save is True:
         runs_df.to_csv(csv_name)
@@ -203,6 +213,7 @@ def sweep2df(
             npy_name,
             val_loss_history=val_loss_histories,
             val_scale_inv_history=val_scale_inv_histories,
+            val_grad_loss_history=val_grad_loss_histories,
         )
 
-    return runs_df, val_loss_histories, val_scale_inv_histories
+    return runs_df, val_loss_histories, val_scale_inv_histories, val_grad_loss_histories
