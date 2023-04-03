@@ -147,7 +147,7 @@ def test_loss_stats(sam_update, rae_update):
 
 def test_decoder_jacobian_grads():
     batch_size = 8
-    vae = VAE(sam_update=False)
+    vae = VAE(sam_update=False, rae_update=False)
 
     x = torch.randn((batch_size, *CIFAR10DataModule.dims))
 
