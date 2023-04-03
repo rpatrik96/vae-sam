@@ -329,7 +329,9 @@ class VAE(LightningModule):
             z.requires_grad = True
         with torch.set_grad_enabled(True):
             grad = torch.autograd.grad(
-                outputs=self.hparams.rec_loss(self.decoder(z), x), inputs=z
+                outputs=self.hparams.rec_loss(self.decoder(z), x),
+                inputs=z,
+                create_graph=True,
             )[0]
 
         if self.training is False:
