@@ -50,16 +50,4 @@ data:
   test_transforms: null
 notes: null
 tags: null
-early_stopping:
-  monitor: val_loss
-  min_delta: 0.0
-  patience: 5
-  verbose: false
-  mode: min
-  strict: true
-  check_finite: true
-  stopping_threshold: null
-  divergence_threshold: null
-  check_on_train_epoch_end: null
-  log_rank_zero_only: false
 ckpt_path: null
