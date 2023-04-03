@@ -212,9 +212,9 @@ class VAE(LightningModule):
             grad_loss = self.hparams.grad_coeff * self._decoder_jacobian(x, z_mu).norm(
                 p=2.0
             )
-            logs = {**logs, "grad_loss": grad_loss}
-
             loss = kl + grad_loss + logs["recon_loss_no_sam"]
+
+            logs = {**logs, "grad_loss": grad_loss.detach()}
         elif self.hparams.sam_update is True and self.hparams.rae_update is False:
             loss = kl + logs["recon_loss_sam"]
         else:
@@ -329,7 +329,9 @@ class VAE(LightningModule):
             z.requires_grad = True
         with torch.set_grad_enabled(True):
             grad = torch.autograd.grad(
-                outputs=self.hparams.rec_loss(self.decoder(z), x), inputs=z
+                outputs=self.hparams.rec_loss(self.decoder(z), x),
+                inputs=z,
+                create_graph=True,
             )[0]
 
         if self.training is False:

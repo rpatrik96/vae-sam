@@ -145,6 +145,18 @@ def test_loss_stats(sam_update, rae_update):
         assert loss == (kl + logs["recon_loss"])
 
 
+def test_decoder_jacobian_grads():
+    batch_size = 8
+    vae = VAE(sam_update=False, rae_update=False)
+
+    x = torch.randn((batch_size, *CIFAR10DataModule.dims))
+
+    xx = vae.encoder(x)
+    z_mu = vae.fc_mu(xx)
+
+    assert vae._decoder_jacobian(x, z_mu).requires_grad == True
+
+
 def test_decoder_jacobian_shape():
     batch_size = 8
     vae = VAE(sam_update=False)
