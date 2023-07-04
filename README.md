@@ -2,7 +2,7 @@
 
 <div align="center">    
  
-# SAM and VAEs 
+# SAMBA: Regularized Autoencoders perform Sharpness-Aware Minimization
 
 <!--  
 [//]: # ([![Paper]&#40;http://img.shields.io/badge/paper-arxiv.2206.02416-B31B1B.svg&#41;]&#40;https://arxiv.org/abs/2206.02416&#41;)
@@ -15,6 +15,7 @@
 
 [![Paper](http://img.shields.io/badge/arxiv-stat.ML:2206.02416-B31B1B.svg)](https://arxiv.org/abs/2206.02416)
 -->  
+[![Conference](http://img.shields.io/badge/AABI-2023.svg)]([https://openreview.net/forum?id=G4GpqX4bKAH](https://openreview.net/forum?id=gk3PAmy_UNz))
 
 ![CI testing](https://github.com/rpatrik96/vae-sam/workflows/CI%20testing/badge.svg?branch=master&event=push)
 
@@ -77,7 +78,13 @@ wandb agent <ID-comes-here> --count=<number of runs> # when used on a cluster, s
 
 ```
 
-@article{
+@inproceedings{
+anonymous2023samba,
+title={{SAMBA}: Regularized Autoencoders perform Sharpness-Aware Minimization},
+author={Anonymous},
+booktitle={Fifth Symposium on Advances in Approximate Bayesian Inference},
+year={2023},
+url={https://openreview.net/forum?id=gk3PAmy_UNz}
 }
 
 ```   
