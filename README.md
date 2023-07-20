@@ -29,7 +29,7 @@ Conference
 </div>
  
 ## Description   
-
+We design a deterministic Autoencoder (called SAMBA) and show that the (deterministic) Regularized Autoencoder from [Ghosh et al., 2020](https://arxiv.org/abs/1903.12436) performs Sharpness-Aware Minimization (SAM).
 
 ## How to run   
 First, install dependencies   
@@ -79,9 +79,9 @@ wandb agent <ID-comes-here> --count=<number of runs> # when used on a cluster, s
 ```
 
 @inproceedings{
-anonymous2023samba,
+reizinger2023samba,
 title={{SAMBA}: Regularized Autoencoders perform Sharpness-Aware Minimization},
-author={Anonymous},
+author={Patrik Reizinger and Ferenc Husz{\'a}r},
 booktitle={Fifth Symposium on Advances in Approximate Bayesian Inference},
 year={2023},
 url={https://openreview.net/forum?id=gk3PAmy_UNz}
