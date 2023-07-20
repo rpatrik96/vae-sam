@@ -4,8 +4,11 @@ authors:
 - family-names: "Reizinger"
   given-names: "Patrik"
   orcid: "https://orcid.org/0000-0001-9861-0293"
+- family-names: "Huszár"
+  given-names: "Ferenc"
+  orcid: "https://orcid.org/0000-0002-4988-1430"
 title: "vae-sam"
-version: 0.0.0
+version: 1.0.0
 doi:
 date-released:
-url: "https://github.com/rpatrik96/vae-sa,"
+url: "https://github.com/rpatrik96/vae-sam"
