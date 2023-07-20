@@ -15,7 +15,8 @@
 
 [![Paper](http://img.shields.io/badge/arxiv-stat.ML:2206.02416-B31B1B.svg)](https://arxiv.org/abs/2206.02416)
 -->  
-[![Conference](http://img.shields.io/badge/AABI-2023.svg)]([https://openreview.net/forum?id=G4GpqX4bKAH](https://openreview.net/forum?id=gk3PAmy_UNz))
+[![Conference](http://img.shields.io/badge/AABI-2023.svg)](https://openreview.net/forum?id=gk3PAmy_UNz)
+
 
 ![CI testing](https://github.com/rpatrik96/vae-sam/workflows/CI%20testing/badge.svg?branch=master&event=push)
 
